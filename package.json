@@ -1,0 +1,28 @@
+{
+  "name": "hdnpipes",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "test": "jest --coverage",
+    "coverage": "http-server coverage/lcov-report"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^4.4.0",
+    "@google-cloud/storage": "^5.4.0",
+    "axios": "^0.21.0",
+    "fastest-validator": "^1.7.0",
+    "jwt-simple": "^0.5.6",
+    "lodash.get": "^4.4.2"
+  },
+  "devDependencies": {
+    "eslint": "^6.8.0",
+    "eslint-config-standard": "^14.1.1",
+    "eslint-plugin-import": "^2.20.2",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^4.2.1",
+    "eslint-plugin-standard": "^4.0.1",
+    "http-server": "^0.12.3",
+    "jest": "^26.0.1"
+  }
+}
