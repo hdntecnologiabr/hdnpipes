@@ -103,8 +103,9 @@ module.exports.get = ({
     const _doc = await doc(ctx)
     const _transaction = await transaction(ctx)
     const docRef = firestore.doc(`${_collection}/${_doc}`)
-    const result = _transaction ? (await _transaction.get(docRef)).data() : (await docRef.get()).data()
-    return success(result, ctx)
+    const result = _transaction ? (await _transaction.get(docRef)) : (await docRef.get())
+    const treatedResult = { id: result.id, ...result.data() }
+    return success(treatedResult, ctx)
   } catch (err) {
     return fail(err, ctx)
   }
