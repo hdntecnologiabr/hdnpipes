@@ -36,6 +36,8 @@ const defaultOrderBy = ctx => undefined
 const convertFirestoreTimestampToJavascriptDate = FirestoreTimestamp =>
   new Timestamp(FirestoreTimestamp.seconds, FirestoreTimestamp.nanoseconds).toDate()
 
+module.exports.Timestamp = Timestamp
+
 module.exports.convertFirestoreTimestampToJavascriptDate = convertFirestoreTimestampToJavascriptDate
 
 module.exports.clearFirestoreClient = () => {
