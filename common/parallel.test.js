@@ -3,7 +3,7 @@ const parallel = require('./parallel')
 describe('parallel function', () => {
   it('deve executar as funções paralelamente e retornar o resultado', async () => {
     const parallelFunction = parallel({
-      functions: [
+      functions: _ => [
         async () => await new Promise(resolve => resolve('a')),
         async () => await new Promise(resolve => resolve('b'))
       ],
@@ -19,7 +19,9 @@ describe('parallel function', () => {
 
   it('deve lançar uma exception caso venha a ocorrer um erro', async () => {
     const parallelFunction = parallel({
-      functions: [() => new Promise((resolve, reject) => reject(new Error('error')))]
+      functions: _ => [
+        () => new Promise((resolve, reject) => reject(new Error('error')))
+      ]
     })
 
     try {
