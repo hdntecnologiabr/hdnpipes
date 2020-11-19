@@ -10,6 +10,7 @@
   "dependencies": {
     "@google-cloud/firestore": "^4.4.0",
     "@google-cloud/storage": "^5.4.0",
+    "@sendgrid/mail": "^7.4.0",
     "axios": "^0.21.0",
     "fastest-validator": "^1.7.0",
     "jwt-simple": "^0.5.6",
