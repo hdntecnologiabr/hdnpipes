@@ -8,7 +8,10 @@ let firestoreClient
 
 const getFirestore = () => {
   if (!firestoreClient) {
-    firestoreClient = new Firestore({ host: process.env.DATABASE_GCFIRESTORE_HOST })
+    firestoreClient = new Firestore({
+      host: process.env.DATABASE_GCFIRESTORE_HOST,
+      keyFilename: process.env.DATABASE_GCFIRESTORE_KEYFILENAME
+    })
   }
   return firestoreClient
 }
