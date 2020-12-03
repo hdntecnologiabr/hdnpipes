@@ -1,4 +1,9 @@
-const { Firestore, FieldPath, FieldValue, Timestamp } = require('@google-cloud/firestore')
+const {
+  Firestore,
+  FieldPath,
+  FieldValue,
+  Timestamp
+} = require('@google-cloud/firestore')
 
 let firestoreClient
 
@@ -8,7 +13,9 @@ let firestoreClient
 
 const getFirestore = () => {
   if (!firestoreClient) {
-    firestoreClient = new Firestore({ host: process.env.DATABASE_GCFIRESTORE_HOST })
+    firestoreClient = new Firestore({
+      host: process.env.DATABASE_GCFIRESTORE_HOST
+    })
   }
   return firestoreClient
 }
@@ -33,8 +40,13 @@ const defaultLimit = ctx => undefined
 
 const defaultOrderBy = ctx => undefined
 
+const defaultOrderByAsc = ctx => true
+
 const convertFirestoreTimestampToJavascriptDate = FirestoreTimestamp =>
-  new Timestamp(FirestoreTimestamp.seconds, FirestoreTimestamp.nanoseconds).toDate()
+  new Timestamp(
+    FirestoreTimestamp.seconds,
+    FirestoreTimestamp.nanoseconds
+  ).toDate()
 
 module.exports.Timestamp = Timestamp
 
@@ -58,10 +70,16 @@ module.exports.add = ({
   try {
     const firestore = getFirestore()
     const _collection = await collection(ctx)
-    const _data = { ...(await data(ctx)), createdAt: Timestamp.now(), updatedAt: Timestamp.now() }
+    const _data = {
+      ...(await data(ctx)),
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    }
     const _transaction = await transaction(ctx)
     const docRef = firestore.collection(_collection).doc()
-    const result = _transaction ? await _transaction.set(docRef, _data) : await docRef.set(_data)
+    const result = _transaction
+      ? await _transaction.set(docRef, _data)
+      : await docRef.set(_data)
     return success(result, ctx)
   } catch (err) {
     return fail(err, ctx)
@@ -83,7 +101,9 @@ module.exports.set = ({
     const _data = { ...(await data(ctx)), updatedAt: Timestamp.now() }
     const _transaction = await transaction(ctx)
     const docRef = firestore.collection(_collection).doc(_doc)
-    const result = _transaction ? await _transaction.set(docRef, _data, { merge: true }) : await docRef.set(_data, { merge: true })
+    const result = _transaction
+      ? await _transaction.set(docRef, _data, { merge: true })
+      : await docRef.set(_data, { merge: true })
     return success(result, ctx)
   } catch (err) {
     return fail(err, ctx)
@@ -103,7 +123,9 @@ module.exports.get = ({
     const _doc = await doc(ctx)
     const _transaction = await transaction(ctx)
     const docRef = firestore.doc(`${_collection}/${_doc}`)
-    const result = _transaction ? (await _transaction.get(docRef)) : (await docRef.get())
+    const result = _transaction
+      ? await _transaction.get(docRef)
+      : await docRef.get()
     const treatedResult = { id: result.id, ...result.data() }
     return success(treatedResult, ctx)
   } catch (err) {
@@ -119,7 +141,8 @@ module.exports.find = ({
   transaction = defaultTransactionFn,
   offset = defaultOffset,
   limit = defaultLimit,
-  orderBy = defaultOrderBy
+  orderBy = defaultOrderBy,
+  orderByAsc = defaultOrderByAsc
 }) => async ctx => {
   try {
     const firestore = getFirestore()
@@ -129,6 +152,7 @@ module.exports.find = ({
     const _offset = await offset(ctx)
     const _limit = await limit(ctx)
     const _orderBy = await orderBy(ctx)
+    const _orderByAsc = await orderByAsc(ctx)
 
     let query = firestore.collection(_collection)
 
@@ -136,19 +160,25 @@ module.exports.find = ({
       query = query.where(w[0], w[1], w[2])
     })
 
-    if (_orderBy) query = query.orderBy(_orderBy)
+    if (_orderBy) query = query.orderBy(_orderBy, _orderByAsc ? 'asc' : 'desc')
     if (_offset) query = query.offset(_offset)
     if (_limit) query = query.limit(_limit)
 
     const _transaction = await transaction(ctx)
 
-    const result = _transaction ? (await _transaction.get(query)).docs : (await query.get()).docs
+    const result = _transaction
+      ? (await _transaction.get(query)).docs
+      : (await query.get()).docs
 
     const treatedResult = result.map(item => ({
       ...item.data(),
       id: item.id,
-      createdAt: convertFirestoreTimestampToJavascriptDate(item.data().createdAt),
-      updatedAt: convertFirestoreTimestampToJavascriptDate(item.data().updatedAt)
+      createdAt: convertFirestoreTimestampToJavascriptDate(
+        item.data().createdAt
+      ),
+      updatedAt: convertFirestoreTimestampToJavascriptDate(
+        item.data().updatedAt
+      )
     }))
 
     return success(treatedResult, ctx)
@@ -170,14 +200,19 @@ module.exports.delete = ({
     const _document = await doc(ctx)
     const _transaction = await transaction(ctx)
     const docRef = firestore.doc(`${_collection}/${_document}`)
-    const result = _transaction ? await _transaction.delete(docRef) : await docRef.delete()
+    const result = _transaction
+      ? await _transaction.delete(docRef)
+      : await docRef.delete()
     return success(result, ctx)
   } catch (err) {
     return fail(err, ctx)
   }
 }
 
-module.exports.transaction = ({ functions = [], fail = defaultFailFn }) => async ctx => {
+module.exports.transaction = ({
+  functions = [],
+  fail = defaultFailFn
+}) => async ctx => {
   try {
     const firestore = getFirestore()
     const resultCtx = await firestore.runTransaction(async transaction => {
