@@ -8,7 +8,7 @@ let storageClient
 
 const getStorage = () => {
   if (!storageClient) {
-    storageClient = new GStorage()
+    storageClient = new GStorage({ keyFilename: process.env.STORAGE_GCSTORAGE_KEYFILENAME })
   }
   return storageClient
 }
