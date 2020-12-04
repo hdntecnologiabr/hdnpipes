@@ -73,8 +73,8 @@ module.exports.add = ({
     const _collection = await collection(ctx)
     const _data = {
       ...(await data(ctx)),
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now()
+      createdAt: new Date().getTime(),
+      updatedAt: new Date().getTime()
     }
     const _transaction = await transaction(ctx)
     const docRef = firestore.collection(_collection).doc()
@@ -99,7 +99,7 @@ module.exports.set = ({
     const firestore = getFirestore()
     const _collection = await collection(ctx)
     const _doc = await doc(ctx)
-    const _data = { ...(await data(ctx)), updatedAt: Timestamp.now() }
+    const _data = { ...(await data(ctx)), updatedAt: new Date().getTime() }
     const _transaction = await transaction(ctx)
     const docRef = firestore.collection(_collection).doc(_doc)
     const result = _transaction
@@ -173,13 +173,7 @@ module.exports.find = ({
 
     const treatedResult = result.map(item => ({
       ...item.data(),
-      id: item.id,
-      createdAt: convertFirestoreTimestampToJavascriptDate(
-        item.data().createdAt
-      ),
-      updatedAt: convertFirestoreTimestampToJavascriptDate(
-        item.data().updatedAt
-      )
+      id: item.id
     }))
 
     return success(treatedResult, ctx)
