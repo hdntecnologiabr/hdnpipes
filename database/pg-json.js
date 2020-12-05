@@ -2,14 +2,14 @@ const { Pool } = require('pg')
 
 const pools = {}
 
-const poolsConfigs = Object.keys(process.env).filter(k => k.includes('DATABASE_PGJSON_CONNECTION_'))
-poolsConfigs.forEach(k => {
-  const poolConfig = process.env[k]
-  const [poolid, connectionString] = poolConfig.split('::')
-  if (!pools[poolid]) {
-    pools[poolid] = new Pool({ connectionString: connectionString })
-    pools[poolid].on('error', (err) => {
-      console.error(`POOL ${poolid} ERROR:`, err)
+const poolsConfigs = JSON.parse(process.env.DATABASE_PGJSON_POOLSCONFIG)
+Object.keys(poolsConfigs).forEach(k => {
+  const poolId = k
+  const connectionString = poolsConfigs[k]
+  if (!pools[poolId]) {
+    pools[poolId] = new Pool({ connectionString: connectionString })
+    pools[poolId].on('error', (err) => {
+      console.error(`POOL ${poolId} ERROR:`, err)
       process.exit(-1)
     })
   }
