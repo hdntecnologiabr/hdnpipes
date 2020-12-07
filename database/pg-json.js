@@ -59,8 +59,8 @@ const andOrFactory = type => (values = []) => {
     if (Array.isArray(w)) {
       const field = w[0] === 'id' ? 'id' : `body->>'${w[0]}'`
       const operator = w[1]
-      const value = w[2]
-      wh.push(`${field}${operator}'${value}'`)
+      const value = operator === 'in' ? w[2] : `'${w[2]}'`
+      wh.push(`${field} ${operator} ${value}`)
     }
   })
   return wh.length > 0 ? `(${wh.join(` ${type} `)})` : ''
