@@ -63,7 +63,7 @@ const andOrFactory = type => (values = []) => {
       wh.push(`${field}${operator}'${value}'`)
     }
   })
-  return `(${wh.join(` ${type} `)})`
+  return wh.length > 0 ? `(${wh.join(` ${type} `)})` : ''
 }
 
 module.exports.and = (...values) => andOrFactory('and')(values)
@@ -90,7 +90,7 @@ module.exports.find = ({
     const _offset = await offset(ctx)
     if (!_poolId || !_table) throw new Error('poolId and table is required')
     const query = [`select * from ${_table}`]
-    if (_where.length > 0) {
+    if (_where) {
       query.push(`where ${_where} `)
     }
     if (_orderBy) {
