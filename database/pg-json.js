@@ -27,9 +27,13 @@ const defaultWhereFn = ctx => ''
 const defaultOrderByFn = ctx => ''
 const defaultLimitFn = ctx => 50
 const defaultOffsetFn = ctx => 0
+const defaultTransactionFn = ctx => ctx.transaction
+const defualtDataFn = ctx => ({})
+const defaultIdFn = ctx => ''
 
 module.exports.query = ({
   poolId = defaultPoolIdFn,
+  transaction = defaultTransactionFn,
   query = defaultQueryFn,
   success = defaultSuccessFn,
   fail = defaultFailFn
@@ -37,9 +41,12 @@ module.exports.query = ({
   let client
   try {
     const _poolId = await poolId(ctx)
+    const _transaction = await transaction(ctx)
     const _query = await query(ctx)
-    client = await pools[_poolId].connect()
-    const result = (await client.query(_query[0], _query[1])).rows.map(d => ({ id: d.id, ...d.body }))
+    if (!_transaction) {
+      client = await pools[_poolId].connect()
+    }
+    const result = (_transaction ? await transaction.query(_query[0], _query[1]) : await client.query(_query[0], _query[1])).rows.map(d => ({ id: d.id, ...d.body }))
     return await success(result, ctx)
   } catch (err) {
     return await fail(err, err)
@@ -72,6 +79,7 @@ module.exports.or = (...values) => andOrFactory('or')(values)
 
 module.exports.find = ({
   poolId = defaultPoolIdFn,
+  transaction = defaultTransactionFn,
   table = defaultTableFn,
   where = defaultWhereFn,
   orderBy = defaultOrderByFn,
@@ -84,11 +92,15 @@ module.exports.find = ({
   try {
     const _poolId = await poolId(ctx)
     const _table = await table(ctx)
+    const _transaction = await transaction(ctx)
     const _where = await where(ctx)
     const _orderBy = await orderBy(ctx)
     const _limit = await limit(ctx)
     const _offset = await offset(ctx)
-    if (!_poolId || !_table) throw new Error('poolId and table is required')
+
+    if (!_poolId && !_transaction) throw new Error('poolId or trasaction is required')
+    if (!_table) throw new Error('table is required')
+
     const query = [`select * from ${_table}`]
     if (_where) {
       query.push(`where ${_where} `)
@@ -100,11 +112,117 @@ module.exports.find = ({
     query.push(`offset ${_offset}`)
     const queryStr = query.join(' ')
     console.info('QUERY:', queryStr)
-    client = await pools[_poolId].connect()
-    const result = (await client.query(queryStr)).rows.map(d => ({ id: d.id, ...d.body }))
+
+    if (!_transaction) {
+      client = await pools[_poolId].connect()
+    }
+    const result = (_transaction
+      ? await _transaction.query(queryStr)
+      : await client.query(queryStr)
+    ).rows.map(d => ({ id: d.id, ...d.body }))
+
     return await success(result, ctx)
   } catch (err) {
     return await fail(err, err)
+  } finally {
+    if (client) {
+      client.release()
+    }
+  }
+}
+
+module.exports.save = ({
+  poolId = defaultPoolIdFn,
+  transaction = defaultTransactionFn,
+  table = defaultTableFn,
+  data = defualtDataFn,
+  success = defaultSuccessFn,
+  fail = defaultFailFn
+}) => async ctx => {
+  let client
+  try {
+    const _poolId = await poolId(ctx)
+    const _transaction = await transaction(ctx)
+    const _table = await table(ctx)
+    const _data = await data(ctx)
+
+    if (!_transaction) {
+      client = await pools[_poolId].connect()
+    }
+
+    const now = new Date()
+    const { id, ...body } = _data
+    body.createdAt = id ? body.createdAt : now
+    body.updatedAt = now
+    const query = id
+      ? [`update ${_table} set body=body||$1 where id=$2`, [JSON.stringify(body), id]]
+      : [`insert into ${_table}(body) values ($1) returning id`, [JSON.stringify(body)]]
+
+    const res = _transaction
+      ? await _transaction.query(query[0], query[1])
+      : await client.query(query[0], query[1])
+
+    return await success(res, ctx)
+  } catch (err) {
+    return await fail(err, ctx)
+  } finally {
+    if (client) {
+      client.release()
+    }
+  }
+}
+
+module.exports.remove = ({
+  poolId = defaultPoolIdFn,
+  transaction = defaultTransactionFn,
+  table = defaultTableFn,
+  id = defaultIdFn,
+  success = defaultSuccessFn,
+  fail = defaultFailFn
+}) => async ctx => {
+  let client
+  try {
+    const _poolId = await poolId(ctx)
+    const _transaction = await transaction(ctx)
+    const _table = await table(ctx)
+    const _id = await id(ctx)
+    if (!_transaction) {
+      client = await pools[_poolId].connect()
+    }
+    const query = `delete from ${_table} where id='${_id}'`
+    const res = _transaction
+      ? await _transaction.query(query)
+      : await client.query(query)
+    return await success(res, ctx)
+  } catch (err) {
+    return await fail(err, ctx)
+  } finally {
+    if (client) {
+      client.release()
+    }
+  }
+}
+
+module.exports.transaction = ({
+  poolId = defaultPoolIdFn,
+  functions = [],
+  fail = defaultFailFn
+}) => async ctx => {
+  let client
+  try {
+    const _poolId = await poolId(ctx)
+    client = await pools[_poolId].connect()
+    client.query('BEGIN;')
+    ctx.transaction = client
+    let current = ctx
+    for (const i in functions) {
+      current = await functions[i](current)
+    }
+    client.query('COMMIT;')
+    return current
+  } catch (err) {
+    client.query('ROLLBACK;')
+    return await fail(err)
   } finally {
     if (client) {
       client.release()
