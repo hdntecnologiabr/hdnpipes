@@ -30,6 +30,7 @@ const defaultOffsetFn = ctx => 0
 const defaultTransactionFn = ctx => ctx.transaction
 const defualtDataFn = ctx => ({})
 const defaultIdFn = ctx => ''
+const defaultDenormalizeFn = ctx => []
 
 module.exports.query = ({
   poolId = defaultPoolIdFn,
@@ -82,6 +83,7 @@ module.exports.find = ({
   transaction = defaultTransactionFn,
   table = defaultTableFn,
   where = defaultWhereFn,
+  denormalize = defaultDenormalizeFn,
   orderBy = defaultOrderByFn,
   limit = defaultLimitFn,
   offset = defaultOffsetFn,
@@ -94,6 +96,7 @@ module.exports.find = ({
     const _table = await table(ctx)
     const _transaction = await transaction(ctx)
     const _where = await where(ctx)
+    const _denormalize = await denormalize(ctx)
     const _orderBy = await orderBy(ctx)
     const _limit = await limit(ctx)
     const _offset = await offset(ctx)
@@ -101,13 +104,27 @@ module.exports.find = ({
     if (!_poolId && !_transaction) throw new Error('poolId or trasaction is required')
     if (!_table) throw new Error('table is required')
 
-    const query = [`select * from ${_table}`]
+    const denormalizedTables = _denormalize.length
+      ? ',' + _denormalize.map(([table, baseField, joinField, denormalizedField], i) => `T${i}.body as ${denormalizedField}`).join(',')
+      : ''
+    const query = [`select ${_table}.* ${denormalizedTables} from ${_table}`]
+
     if (_where) {
       query.push(`where ${_where} `)
     }
+
+    if (_denormalize.length) {
+      _denormalize.forEach((d, i) => {
+        const sqlField = field => table => `cast(${table}.${(field === 'id' ? field : `body->>'${field}'`)} as text)`
+        const [table, baseField, joinField] = d
+        query.push(`left join ${table} T${i} on ${sqlField(joinField)(`T${i}`)}=${sqlField(baseField)(_table)}`)
+      })
+    }
+
     if (_orderBy) {
       query.push(`order by ${_orderBy === 'id' ? _orderBy : `body->>'${_orderBy}'`}`)
     }
+
     query.push(`limit ${_limit}`)
     query.push(`offset ${_offset}`)
     const queryStr = query.join(' ')
@@ -119,7 +136,11 @@ module.exports.find = ({
     const result = (_transaction
       ? await _transaction.query(queryStr)
       : await client.query(queryStr)
-    ).rows.map(d => ({ id: d.id, ...d.body }))
+    ).rows
+      .map(d => {
+        const { id, body, ...rest } = d
+        return { id, ...body, ...rest }
+      })
 
     return await success(result, ctx)
   } catch (err) {
