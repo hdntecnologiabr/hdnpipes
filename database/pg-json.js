@@ -60,17 +60,17 @@ module.exports.query = ({
 
 const getFieldOperatorValue = {
   default: where => ({
-    field: where[0] === 'id' ? 'id' : `body->>'${where[0]}'`,
+    field: where[0] === 'id' ? '_table_.id' : `_table_.body->>'${where[0]}'`,
     operator: where[1],
     value: `'${where[2]}'`
   }),
   'array-contains': where => ({
-    field: where[0] === 'id' ? 'id' : `body->'${where[0]}'`,
+    field: where[0] === 'id' ? '_table_.id' : `_table_.body->'${where[0]}'`,
     operator: '?',
     value: `'${where[2]}'`
   }),
   in: where => ({
-    field: where[0] === 'id' ? 'id' : `body->>'${where[0]}'`,
+    field: where[0] === 'id' ? '_table_.id' : `_table_.body->>'${where[0]}'`,
     operator: where[1],
     value: where[2]
   })
@@ -125,16 +125,16 @@ module.exports.find = ({
       : ''
     const query = [`select ${_table}.* ${denormalizedTables} from ${_table}`]
 
-    if (_where) {
-      query.push(`where ${_where} `)
-    }
-
     if (_denormalize.length) {
       _denormalize.forEach((d, i) => {
         const sqlField = field => table => `cast(${table}.${(field === 'id' ? field : `body->>'${field}'`)} as text)`
         const [table, baseField, joinField] = d
         query.push(`left join ${table} T${i} on ${sqlField(joinField)(`T${i}`)}=${sqlField(baseField)(_table)}`)
       })
+    }
+
+    if (_where) {
+      query.push(`where ${_where.replace(/_table_/g, _table)} `)
     }
 
     if (_orderBy) {
