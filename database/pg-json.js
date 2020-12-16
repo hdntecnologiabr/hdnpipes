@@ -58,6 +58,24 @@ module.exports.query = ({
   }
 }
 
+const getFieldOperatorValue = {
+  default: where => ({
+    field: where[0] === 'id' ? 'id' : `body->>'${where[0]}'`,
+    operator: where[1],
+    value: `'${where[2]}'`
+  }),
+  'array-contains': where => ({
+    field: where[0] === 'id' ? 'id' : `body->'${where[0]}'`,
+    operator: '?',
+    value: `'${where[2]}'`
+  }),
+  in: where => ({
+    field: where[0] === 'id' ? 'id' : `body->>'${where[0]}'`,
+    operator: where[1],
+    value: where[2]
+  })
+}
+
 const andOrFactory = type => (values = []) => {
   const wh = []
   values.forEach(w => {
@@ -65,9 +83,7 @@ const andOrFactory = type => (values = []) => {
       wh.push(w)
     }
     if (Array.isArray(w)) {
-      const field = w[0] === 'id' ? 'id' : `body->>'${w[0]}'`
-      const operator = w[1]
-      const value = operator === 'in' ? w[2] : `'${w[2]}'`
+      const { field, operator, value } = (getFieldOperatorValue[w[1]] || getFieldOperatorValue.default)(w)
       wh.push(`${field} ${operator} ${value}`)
     }
   })
