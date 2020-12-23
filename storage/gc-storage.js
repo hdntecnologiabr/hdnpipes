@@ -94,7 +94,10 @@ module.exports.uploadFile = ({
       : await fileBuffer(ctx)
 
     const storageFileNameWithPath =
-      (_storagePath ? `${_storagePath}/` : '') + _fileName
+      (_storagePath ? `${_storagePath}/` : '') +
+      new Date().getTime() +
+      ' - ' +
+      _fileName
 
     const blob = storage
       .bucket(process.env.GCLOUD_STORAGE_BUCKET)
