@@ -1,14 +1,17 @@
 const { Storage: GStorage } = require('@google-cloud/storage')
+const fs = require('fs')
 
 let storageClient
 
 /**
- * @returns {{GStorage}}
+ * @returns {GStorage}
  */
 
 const getStorage = () => {
   if (!storageClient) {
-    storageClient = new GStorage({ keyFilename: process.env.STORAGE_GCSTORAGE_KEYFILENAME })
+    storageClient = new GStorage({
+      keyFilename: process.env.STORAGE_GCSTORAGE_KEYFILENAME
+    })
   }
   return storageClient
 }
@@ -22,6 +25,12 @@ const defaultFailFn = (err, ctx) => {
 }
 
 const defaultExpiresInTimestampFn = ctx => Date.now() + 1000 * 60 // one minute
+
+const defaultFileNameFn = ctx => ''
+
+const defaultFileBufferFn = ctx => undefined
+
+const defaultStoragePathFn = ctx => undefined
 
 /**
  * @param {string} GCStoragePath
@@ -61,6 +70,50 @@ module.exports.get = ({
     })
 
     return success(result[0], ctx)
+  } catch (err) {
+    return fail(err, ctx)
+  }
+}
+
+module.exports.uploadFile = ({
+  fileName = defaultFileNameFn,
+  fileBuffer = defaultFileBufferFn,
+  filePath = defaultFilePathFn,
+  storagePath = defaultStoragePathFn,
+  success = defaultSuccessFn,
+  fail = defaultFailFn
+}) => async ctx => {
+  try {
+    const storage = getStorage(ctx)
+
+    const _filePath = await filePath(ctx)
+    const _fileName = await fileName(ctx)
+    const _storagePath = await storagePath(ctx)
+    const _fileBuffer = _filePath
+      ? await fs.readFileSync(_filePath)
+      : await fileBuffer(ctx)
+
+    const storageFileNameWithPath =
+      (_storagePath ? `${_storagePath}/` : '') + _fileName
+
+    const blob = storage
+      .bucket(process.env.GCLOUD_STORAGE_BUCKET)
+      .file(storageFileNameWithPath)
+    const blobStream = blob.createWriteStream({
+      resumable: false
+    })
+    return await new Promise(resolve =>
+      blobStream
+        .on('finish', () => {
+          resolve(
+            success(
+              `gs://${process.env.GCLOUD_STORAGE_BUCKET}/${storageFileNameWithPath}`,
+              ctx
+            )
+          )
+        })
+        .end(_fileBuffer)
+    )
   } catch (err) {
     return fail(err, ctx)
   }
