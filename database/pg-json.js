@@ -11,11 +11,14 @@ const startPools = () => {
       pools[poolId] = new Pool({ connectionString: connectionString })
       pools[poolId].on('error', (err) => {
         console.error(`POOL ${poolId} ERROR:`, err)
-        process.exit(-1)
+        //process.exit(-1)
       })
     }
   })
 }
+
+module.exports.startPools = startPools
+
 startPools()
 
 const defaultPoolIdFn = ctx => ''
@@ -50,7 +53,7 @@ module.exports.query = ({
     const result = (_transaction ? await transaction.query(_query[0], _query[1]) : await client.query(_query[0], _query[1])).rows.map(d => ({ id: d.id, ...d.body }))
     return await success(result, ctx)
   } catch (err) {
-    return await fail(err, err)
+    return await fail(err, ctx)
   } finally {
     if (client) {
       client.release()

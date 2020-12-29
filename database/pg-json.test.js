@@ -1,144 +1,97 @@
-const { Firestore, Timestamp } = require('@google-cloud/firestore')
+const { Pool } = require('pg')
 const {
-  set,
-  add,
-  delete: fdelete,
+  startPools,
+  query,
+  and,
+  or,
   find,
-  get,
-  transaction,
-  clearFirestoreClient,
-  convertFirestoreTimestampToJavascriptDate
-} = require('./gc-firestore')
+  save,
+  remove,
+  transaction
+} = require('./pg-json')
 
-jest.mock('@google-cloud/firestore')
+jest.mock('pg')
 
-describe('firestore module', () => {
+describe('postgres module', () => {
+
   beforeAll(() => {
-    Timestamp.mockImplementation(() => ({
-      seconds: 0,
-      nanoseconds: 0,
-      toDate: () => 0
-    }))
+    process.env.DATABASE_PGJSON_POOLSCONFIG = '{"cooperativeId": "cooperativeId"}' || '{}'
   })
 
-  describe('convertFirestoreTimestampToJavascriptDate function', () => {
-    it('deve receber segundos e milisegundos', () => {
-      expect(convertFirestoreTimestampToJavascriptDate({ seconds: 0, nanoseconds: 0})).toEqual(0)
-    })
-  })
-
-  describe('firestoreClient cache', () => {
-    it('deve executar a função firestore.get do firestore, gerando o firestoreClient e em seguida chamar a mesma funcao novamente usando o firestoreClient gerado', async () => {
-      Firestore.mockImplementation(() => ({
-        doc: cdc => {
-          expect(cdc).toBe('collection test/doc test')
-          return {
-            get: () => {
-              return {
-                data: () => ({})
-              }
-            }
+  describe('start pools', () => {
+    it('iniciando as pools', () => {
+      Pool.mockImplementation(({ connectionString }) => {
+        expect(connectionString).toEqual('cooperativeId')
+        return {
+          connectionString,
+          callbacks: { error: '' },
+          on: (e, callback) => {
+            expect(e).toEqual('error')
+            callback()
+          },
+          connect: () => {
+            return { query: (queryText, values) => [{ queryText: queryText, values: values }] }
           }
         }
-      }))
-      await get({
-        collection: cxt => 'collection test',
-        doc: ctx => 'doc test'
-      })()
-      await get({
-        collection: cxt => 'collection test',
-        doc: ctx => 'doc test'
-      })()
+      })
+      startPools()
+      startPools()
     })
   })
 
-  describe('set function', () => {
+  describe('query function', () => {
     beforeEach(() => {
-      Firestore.mockReset()
-      clearFirestoreClient()
+      Pool.mockReset()
     })
 
-    it('deve passar os parametros corretos para a função firestore.set do firebase', async () => {
-      Firestore.mockImplementation(() => ({
-        collection: cl => {
-          expect(cl).toBe('collection test')
-          return {
-            doc: dc => {
-              expect(dc).toBe('doc test')
-              return {
-                set: dt => {
-                  expect(dt.test).toBe('data test')
-                }
-              }
-            }
-          }
-        }
-      }))
-      await set({
-        collection: cxt => 'collection test',
-        doc: ctx => 'doc test',
-        data: ctx => ({ test: 'data test' })
-      })()
-    })
-
-    it('deve passar os parametros corretos para a função firestore.set do firebase com uma transaction', async () => {
-      Firestore.mockImplementation(() => ({
-        collection: cl => {
-          expect(cl).toBe('collection test')
-          return {
-            doc: dc => {
-              expect(dc).toBe('doc test')
-              return 'doc ref test'
-            }
-          }
-        }
-      }))
-      const mockTransaction = ctx => ({
-        set: (dr, dt) => {
-          expect(dr).toBe('doc ref test')
-          expect(dt.test).toBe('data test')
-        }
-      })
-
-      await set({
-        collection: cxt => 'collection test',
-        doc: ctx => 'doc test',
-        data: ctx => ({ test: 'data test' }),
-        transaction: mockTransaction
-      })()
-    })
-
-    it('deve passar como parametro o erro e o contexto para a função fail caso ocorrer erro', async () => {
-      Firestore.mockImplementation(() => {
-        throw new Error('error test')
-      })
-      expect(await set({ fail: (err, ctx) => err.message })()).toBe(
-        'error test'
-      )
-    })
-
-    it('deve estourar exceção caso a função fail não for definida e ocorrer erro', async () => {
-      Firestore.mockImplementation(() => ({
-        collection: cl => {
-          throw new Error('error test')
-        }
-      }))
+    it('deve testar o default da função, causando um erro pela falta do poolId', async () => {
+      const queryFn = query({})
       try {
-        await set({})()
+        await queryFn()
       } catch (err) {
-        expect(err.message).toBe('error test')
+        expect(err.message).toBe("Cannot read property 'transaction' of undefined")
       }
     })
-  })
 
-  describe('add function', () => {
-    beforeEach(() => {
-      Firestore.mockReset()
-      clearFirestoreClient()
+    it('deve passar os parâmetros para a função', async () => {
+      const ctx = {
+        poolId: 'cooperativeId',
+        transaction: 'transaction',
+        query: ['', []],
+        success: []
+      }
+      const queryFn = query({
+        poolId: (ctx) => {
+          expect(ctx.poolId).toBe('cooperativeId')
+          return ctx.poolId
+        },
+        transaction: (ctx) => {
+          expect(ctx.transaction).toBe('transaction')
+          return ctx.transaction
+        },
+        query: (ctx) => (['', []]),
+        success: (result, ctx) => {
+          expect(ctx.success).toBe([])
+          return ctx.success
+        }
+      })
+      await queryFn({
+        poolId: 'cooperativeId',
+        transaction: 'transaction',
+        query: ['', []],
+        success: []
+      })
     })
 
-    it('deve passar os parametros corretos para a função firestore.add do firebase', async () => {
-      Firestore.mockImplementation(() => ({
+  })
+
+  /*describe('find function', () => {
+    beforeEach(() => {
+      Pool.mockReset()
+    })
+
+    it('deve passar os parametros corretos para a função postgres.find do postgres', async () => {
+      Pool.mockImplementation(() => ({
         collection: cl => {
           expect(cl).toBe('collection test')
           return {
@@ -153,13 +106,13 @@ describe('firestore module', () => {
           }
         }
       }))
-      await add({
-        collection: cxt => 'collection test',
+      await find({
+        table: ctx => 'table test',
         data: ctx => ({ test: 'data test' })
       })()
     })
 
-    it('deve passar os parametros corretos para a função firestore.add do firebase com uma transaction', async () => {
+    it('deve passar os parametros corretos para a função firestore.add do postgres com uma transaction', async () => {
       Firestore.mockImplementation(() => ({
         collection: cl => {
           expect(cl).toBe('collection test')
@@ -486,7 +439,7 @@ describe('firestore module', () => {
         doc: cdc => {
           expect(cdc).toBe('collection test/doc test')
           return {
-            delete: () => {}
+            delete: () => { }
           }
         }
       }))
@@ -566,5 +519,5 @@ describe('firestore module', () => {
         'error test'
       )
     })
-  })
+  })*/
 })
