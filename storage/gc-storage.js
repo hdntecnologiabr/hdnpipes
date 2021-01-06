@@ -96,7 +96,7 @@ module.exports.uploadFile = ({
     const storageFileNameWithPath =
       (_storagePath ? `${_storagePath}/` : '') +
       new Date().getTime() +
-      ' - ' +
+      '-' +
       _fileName
 
     const blob = storage
