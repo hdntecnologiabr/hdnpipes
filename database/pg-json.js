@@ -3,15 +3,17 @@ const { Pool } = require('pg')
 const pools = {}
 
 const startPools = () => {
-  const poolsConfigs = JSON.parse(process.env.DATABASE_PGJSON_POOLSCONFIG || '{}')
+  const poolsConfigs = JSON.parse(
+    process.env.DATABASE_PGJSON_POOLSCONFIG || '{}'
+  )
   Object.keys(poolsConfigs).forEach(k => {
     const poolId = k
     const connectionString = poolsConfigs[k]
     if (!pools[poolId]) {
       pools[poolId] = new Pool({ connectionString: connectionString })
-      pools[poolId].on('error', (err) => {
+      pools[poolId].on('error', err => {
         console.error(`POOL ${poolId} ERROR:`, err)
-        //process.exit(-1)
+        // process.exit(-1)
       })
     }
   })
@@ -24,7 +26,9 @@ startPools()
 const defaultPoolIdFn = ctx => ''
 const defaultQueryFn = ctx => ['', []]
 const defaultSuccessFn = (result, ctx) => ({ result, ctx })
-const defaultFailFn = (err, ctx) => { throw err }
+const defaultFailFn = (err, ctx) => {
+  throw err
+}
 const defaultTableFn = ctx => ''
 const defaultWhereFn = ctx => ''
 const defaultOrderByFn = ctx => ''
@@ -50,7 +54,10 @@ module.exports.query = ({
     if (!_transaction) {
       client = await pools[_poolId].connect()
     }
-    const result = (_transaction ? await transaction.query(_query[0], _query[1]) : await client.query(_query[0], _query[1])).rows.map(d => ({ id: d.id, ...d.body }))
+    const result = (_transaction
+      ? await transaction.query(_query[0], _query[1])
+      : await client.query(_query[0], _query[1])
+    ).rows.map(d => ({ id: d.id, ...d.body }))
     return await success(result, ctx)
   } catch (err) {
     return await fail(err, ctx)
@@ -61,9 +68,21 @@ module.exports.query = ({
   }
 }
 
+const constructJsonbPath = rawPath =>
+  rawPath
+    .split('.')
+    .reduce(
+      (fields, field, i, rawFields) =>
+        `${fields}${i === rawFields.length - 1 ? '->>' : '->'}'${field}'`,
+      ''
+    )
+
 const getFieldOperatorValue = {
   default: where => ({
-    field: where[0] === 'id' ? '_table_.id' : `_table_.body->>'${where[0]}'`,
+    field:
+      where[0] === 'id'
+        ? '_table_.id'
+        : `_table_.body${constructJsonbPath(where[0])}`,
     operator: where[1],
     value: `'${where[2]}'`
   }),
@@ -73,7 +92,10 @@ const getFieldOperatorValue = {
     value: `'${where[2]}'`
   }),
   in: where => ({
-    field: where[0] === 'id' ? '_table_.id' : `_table_.body->>'${where[0]}'`,
+    field:
+      where[0] === 'id'
+        ? '_table_.id'
+        : `_table_.body${constructJsonbPath(where[0])}`,
     operator: where[1],
     value: where[2]
   })
@@ -86,7 +108,9 @@ const andOrFactory = type => (values = []) => {
       wh.push(w)
     }
     if (Array.isArray(w)) {
-      const { field, operator, value } = (getFieldOperatorValue[w[1]] || getFieldOperatorValue.default)(w)
+      const { field, operator, value } = (
+        getFieldOperatorValue[w[1]] || getFieldOperatorValue.default
+      )(w)
       wh.push(`${field} ${operator} ${value}`)
     }
   })
@@ -120,19 +144,34 @@ module.exports.find = ({
     const _limit = await limit(ctx)
     const _offset = await offset(ctx)
 
-    if (!_poolId && !_transaction) throw new Error('poolId or trasaction is required')
+    if (!_poolId && !_transaction) {
+      throw new Error('poolId or trasaction is required')
+    }
     if (!_table) throw new Error('table is required')
 
     const denormalizedTables = _denormalize.length
-      ? ',' + _denormalize.map(([table, baseField, joinField, denormalizedField], i) => `T${i}.body as ${denormalizedField}`).join(',')
+      ? ',' +
+        _denormalize
+          .map(
+            ([table, baseField, joinField, denormalizedField], i) =>
+              `T${i}.body as ${denormalizedField}`
+          )
+          .join(',')
       : ''
     const query = [`select ${_table}.* ${denormalizedTables} from ${_table}`]
 
     if (_denormalize.length) {
       _denormalize.forEach((d, i) => {
-        const sqlField = field => table => `cast(${table}.${(field === 'id' ? field : `body->>'${field}'`)} as text)`
+        const sqlField = field => table =>
+          `cast(${table}.${
+            field === 'id' ? field : `body->>'${field}'`
+          } as text)`
         const [table, baseField, joinField] = d
-        query.push(`left join ${table} T${i} on ${sqlField(joinField)(`T${i}`)}=${sqlField(baseField)(_table)}`)
+        query.push(
+          `left join ${table} T${i} on ${sqlField(joinField)(
+            `T${i}`
+          )}=${sqlField(baseField)(_table)}`
+        )
       })
     }
 
@@ -141,7 +180,13 @@ module.exports.find = ({
     }
 
     if (_orderBy) {
-      query.push(`order by ${_orderBy === 'id' ? _orderBy : `body->>'${_orderBy}'`}`)
+      query.push(
+        `order by ${
+          _orderBy === 'id'
+            ? _orderBy
+            : `body->>'${constructJsonbPath(_orderBy)}'`
+        }`
+      )
     }
 
     query.push(`limit ${_limit}`)
@@ -155,11 +200,10 @@ module.exports.find = ({
     const result = (_transaction
       ? await _transaction.query(queryStr)
       : await client.query(queryStr)
-    ).rows
-      .map(d => {
-        const { id, body, ...rest } = d
-        return { id, ...body, ...rest }
-      })
+    ).rows.map(d => {
+      const { id, body, ...rest } = d
+      return { id, ...body, ...rest }
+    })
 
     return await success(result, ctx)
   } catch (err) {
@@ -195,8 +239,14 @@ module.exports.save = ({
     body.createdAt = id ? body.createdAt : now
     body.updatedAt = now
     const query = id
-      ? [`update ${_table} set body=body||$1 where id=$2`, [JSON.stringify(body), id]]
-      : [`insert into ${_table}(body) values ($1) returning id`, [JSON.stringify(body)]]
+      ? [
+          `update ${_table} set body=body||$1 where id=$2`,
+          [JSON.stringify(body), id]
+      ]
+      : [
+          `insert into ${_table}(body) values ($1) returning id`,
+          [JSON.stringify(body)]
+      ]
 
     const res = _transaction
       ? await _transaction.query(query[0], query[1])
