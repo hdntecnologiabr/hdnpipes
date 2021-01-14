@@ -34,13 +34,13 @@ module.exports.sendEmail = ({
   fail = defaultFailFn
 }) => async ctx => {
   try {
-    const _receivers = receivers(ctx)
-    const _subject = subject(ctx)
-    const _text = text(ctx)
-    const _html = html(ctx)
-    const _attachments = attachments(ctx)
-    const _senderName = senderName(ctx)
-    const _senderEmail = senderEmail(ctx)
+    const _receivers = await receivers(ctx)
+    const _subject = await subject(ctx)
+    const _text = await text(ctx)
+    const _html = await html(ctx)
+    const _attachments = await attachments(ctx)
+    const _senderName = await senderName(ctx)
+    const _senderEmail = await senderEmail(ctx)
 
     const msg = {
       to: _receivers,
