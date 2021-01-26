@@ -97,7 +97,15 @@ const getFieldOperatorValue = {
         ? '_table_.id'
         : `_table_.body${constructJsonbPath(where[0])}`,
     operator: where[1],
-    value: where[2]
+    value: Array.isArray(where[2])
+      ? where[2].reduce(
+        (queryValue, currentValue, index) =>
+            `${index === 0 ? '(' : ''}${queryValue}${
+              index > 0 ? `, '${currentValue}'` : `'${currentValue}'`
+            }${index === where[2].length - 1 ? ')' : ''}`,
+        ''
+      )
+      : []
   })
 }
 
