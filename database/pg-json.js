@@ -32,6 +32,7 @@ const defaultFailFn = (err, ctx) => {
 const defaultTableFn = ctx => ''
 const defaultWhereFn = ctx => ''
 const defaultOrderByFn = ctx => ''
+const defaultOrderByAscFn = ctx => true
 const defaultLimitFn = ctx => 50
 const defaultOffsetFn = ctx => 0
 const defaultTransactionFn = ctx => ctx.transaction
@@ -136,6 +137,7 @@ module.exports.find = ({
   where = defaultWhereFn,
   denormalize = defaultDenormalizeFn,
   orderBy = defaultOrderByFn,
+  orderByAsc = defaultOrderByAscFn,
   limit = defaultLimitFn,
   offset = defaultOffsetFn,
   success = defaultSuccessFn,
@@ -149,6 +151,7 @@ module.exports.find = ({
     const _where = await where(ctx)
     const _denormalize = await denormalize(ctx)
     const _orderBy = await orderBy(ctx)
+    const _orderByAsc = await orderByAsc(ctx)
     const _limit = await limit(ctx)
     const _offset = await offset(ctx)
 
@@ -190,10 +193,8 @@ module.exports.find = ({
     if (_orderBy) {
       query.push(
         `order by ${
-          _orderBy === 'id'
-            ? _orderBy
-            : `body->>'${constructJsonbPath(_orderBy)}'`
-        }`
+          _orderBy === 'id' ? _orderBy : `body${constructJsonbPath(_orderBy)}`
+        } ${_orderByAsc ? 'asc' : 'desc'}`
       )
     }
 
