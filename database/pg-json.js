@@ -32,7 +32,6 @@ const defaultFailFn = (err, ctx) => {
 const defaultTableFn = ctx => ''
 const defaultWhereFn = ctx => ''
 const defaultOrderByFn = ctx => ''
-const defaultOrderByAscFn = ctx => true
 const defaultLimitFn = ctx => 50
 const defaultOffsetFn = ctx => 0
 const defaultTransactionFn = ctx => ctx.transaction
@@ -77,6 +76,21 @@ const constructJsonbPath = rawPath =>
         `${fields}${i === rawFields.length - 1 ? '->>' : '->'}'${field}'`,
       ''
     )
+
+const constructOrderByExpression = rawOrderByExpression => {
+  const { field, operator, value } = (
+    getFieldOperatorValue[rawOrderByExpression[1]] ||
+    getFieldOperatorValue.default
+  )(rawOrderByExpression)
+
+  const order =
+    rawOrderByExpression[3] &&
+    (rawOrderByExpression[3] === 'asc' || rawOrderByExpression[3] === 'desc')
+      ? rawOrderByExpression[3]
+      : 'asc'
+
+  return `${field} ${operator} ${value} ${order}`
+}
 
 const getFieldOperatorValue = {
   default: where => ({
@@ -137,7 +151,6 @@ module.exports.find = ({
   where = defaultWhereFn,
   denormalize = defaultDenormalizeFn,
   orderBy = defaultOrderByFn,
-  orderByAsc = defaultOrderByAscFn,
   limit = defaultLimitFn,
   offset = defaultOffsetFn,
   success = defaultSuccessFn,
@@ -151,7 +164,6 @@ module.exports.find = ({
     const _where = await where(ctx)
     const _denormalize = await denormalize(ctx)
     const _orderBy = await orderBy(ctx)
-    const _orderByAsc = await orderByAsc(ctx)
     const _limit = await limit(ctx)
     const _offset = await offset(ctx)
 
@@ -191,11 +203,24 @@ module.exports.find = ({
     }
 
     if (_orderBy) {
-      query.push(
-        `order by ${
-          _orderBy === 'id' ? _orderBy : `body${constructJsonbPath(_orderBy)}`
-        } ${_orderByAsc ? 'asc' : 'desc'}`
-      )
+      const treatedOrderBy = Array.isArray(_orderBy)
+        ? _orderBy
+          .map(rawOrderByExpression =>
+            constructOrderByExpression(rawOrderByExpression).replace(
+              /_table_/g,
+              _table
+            )
+          )
+          .reduce((finalExpression, currentExpression, index) => {
+            return `${finalExpression}${
+                index !== 0 ? ', ' : ''
+              }${currentExpression}`
+          }, '')
+        : _orderBy === 'id'
+          ? _orderBy
+          : `body${constructJsonbPath(_orderBy)}`
+
+      query.push(`order by ${treatedOrderBy}`)
     }
 
     query.push(`limit ${_limit}`)
