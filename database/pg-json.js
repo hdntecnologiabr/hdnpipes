@@ -206,10 +206,12 @@ module.exports.find = ({
       const treatedOrderBy = Array.isArray(_orderBy)
         ? _orderBy
           .map(rawOrderByExpression =>
-            constructOrderByExpression(rawOrderByExpression).replace(
-              /_table_/g,
-              _table
-            )
+            (rawOrderByExpression.length === 2
+              ? `body${constructJsonbPath(rawOrderByExpression[0])} ${
+                    rawOrderByExpression[1]
+                  }`
+              : constructOrderByExpression(rawOrderByExpression)
+            ).replace(/_table_/g, _table)
           )
           .reduce((finalExpression, currentExpression, index) => {
             return `${finalExpression}${
