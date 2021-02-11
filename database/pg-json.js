@@ -103,8 +103,8 @@ const getFieldOperatorValue = {
   }),
   'array-contains': where => ({
     field: where[0] === 'id' ? '_table_.id' : `_table_.body->'${where[0]}'`,
-    operator: '?',
-    value: `'${where[2]}'`
+    operator: '@>',
+    value: `'${JSON.stringify(where[2])}'`
   }),
   in: where => ({
     field:
