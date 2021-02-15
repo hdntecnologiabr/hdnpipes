@@ -99,7 +99,7 @@ const getFieldOperatorValue = {
         ? '_table_.id'
         : `_table_.body${constructJsonbPath(where[0])}`,
     operator: where[1],
-    value: `'${where[2]}'`
+    value: `${where[2] === null ? where[2] : `'${where[2]}'`}`
   }),
   'array-contains': where => ({
     field: where[0] === 'id' ? '_table_.id' : `_table_.body->'${where[0]}'`,
