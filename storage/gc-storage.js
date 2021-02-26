@@ -100,7 +100,7 @@ module.exports.uploadFile = ({
       _fileName
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^\w\s]/gi, '')
+        .replace(/[^\w\s.]/gi, '')
         .replace(/\s/gi, '_')
         .toLowerCase()
 
