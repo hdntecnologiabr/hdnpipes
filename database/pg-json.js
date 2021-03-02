@@ -203,15 +203,14 @@ module.exports.find = ({
     }
 
     if (_orderBy) {
-      const treatedOrderBy = Array.isArray(_orderBy)
+      const treatedOrderBy = (Array.isArray(_orderBy)
         ? _orderBy
           .map(rawOrderByExpression =>
-            (rawOrderByExpression.length === 2
-              ? `body${constructJsonbPath(rawOrderByExpression[0])} ${
+            rawOrderByExpression.length === 2
+              ? `_table_.body${constructJsonbPath(rawOrderByExpression[0])} ${
                     rawOrderByExpression[1]
                   }`
               : constructOrderByExpression(rawOrderByExpression)
-            ).replace(/_table_/g, _table)
           )
           .reduce((finalExpression, currentExpression, index) => {
             return `${finalExpression}${
@@ -220,7 +219,8 @@ module.exports.find = ({
           }, '')
         : _orderBy === 'id'
           ? _orderBy
-          : `body${constructJsonbPath(_orderBy)}`
+          : `_table_.body${constructJsonbPath(_orderBy)}`
+      ).replace(/_table_/g, _table)
 
       query.push(`order by ${treatedOrderBy}`)
     }
