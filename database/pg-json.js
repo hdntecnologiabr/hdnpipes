@@ -243,7 +243,7 @@ module.exports.find = ({
 
     return await success(result, ctx)
   } catch (err) {
-    return await fail(err, err)
+    return await fail(err, ctx)
   } finally {
     if (client) {
       client.release()
