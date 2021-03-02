@@ -187,7 +187,7 @@ module.exports.find = ({
       _denormalize.forEach((d, i) => {
         const sqlField = field => table =>
           `cast(${table}.${
-            field === 'id' ? field : `body->>'${field}'`
+            field === 'id' ? field : `body${constructJsonbPath(field)}`
           } as text)`
         const [table, baseField, joinField] = d
         query.push(
