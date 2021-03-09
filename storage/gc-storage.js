@@ -126,3 +126,23 @@ module.exports.uploadFile = ({
     return fail(err, ctx)
   }
 }
+
+module.exports.removeFile = ({
+  storagePath = defaultStoragePathFn,
+  success = defaultSuccessFn,
+  fail = defaultFailFn
+}) => async ctx => {
+  try {
+    const storage = getStorage(ctx)
+
+    const _storagePath = await storagePath(ctx)
+
+    const { bucket, fileName } = separateGCStoragePath(_storagePath)
+
+    await storage.bucket(bucket).file(fileName).delete()
+
+    return success(true, ctx)
+  } catch (err) {
+    return fail(err, ctx)
+  }
+}
