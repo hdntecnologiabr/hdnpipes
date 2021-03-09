@@ -38,6 +38,8 @@ const defaultTransactionFn = ctx => ctx.transaction
 const defualtDataFn = ctx => ({})
 const defaultIdFn = ctx => ''
 const defaultDenormalizeFn = ctx => []
+const defaultSubqueriesFn = ctx => []
+const defaultReturnQueryFn = ctx => false
 
 module.exports.query = ({
   poolId = defaultPoolIdFn,
@@ -150,10 +152,12 @@ module.exports.find = ({
   table = defaultTableFn,
   where = defaultWhereFn,
   denormalize = defaultDenormalizeFn,
+  subqueries = defaultSubqueriesFn,
   orderBy = defaultOrderByFn,
   limit = defaultLimitFn,
   offset = defaultOffsetFn,
   success = defaultSuccessFn,
+  returnQuery = defaultReturnQueryFn,
   fail = defaultFailFn
 }) => async ctx => {
   let client
@@ -163,9 +167,11 @@ module.exports.find = ({
     const _transaction = await transaction(ctx)
     const _where = await where(ctx)
     const _denormalize = await denormalize(ctx)
+    const _subqueries = await subqueries(ctx)
     const _orderBy = await orderBy(ctx)
     const _limit = await limit(ctx)
     const _offset = await offset(ctx)
+    const _returnQuery = await returnQuery(ctx)
 
     if (!_poolId && !_transaction) {
       throw new Error('poolId or trasaction is required')
@@ -181,7 +187,21 @@ module.exports.find = ({
           )
           .join(',')
       : ''
-    const query = [`select ${_table}.* ${denormalizedTables} from ${_table}`]
+
+    const treatedSubqueries = _subqueries.length
+      ? ',' +
+        (
+          await Promise.all(
+            _subqueries.map(
+              async ([query, field]) => `(${await query(ctx)}) as ${field}`
+            )
+          )
+        ).join(',')
+      : ''
+
+    const query = [
+      `select ${_table}.* ${denormalizedTables} ${treatedSubqueries} from ${_table}`
+    ]
 
     if (_denormalize.length) {
       _denormalize.forEach((d, i) => {
@@ -228,6 +248,7 @@ module.exports.find = ({
     query.push(`limit ${_limit}`)
     query.push(`offset ${_offset}`)
     const queryStr = query.join(' ')
+    if (_returnQuery) return queryStr
     console.info('QUERY:', queryStr)
 
     if (!_transaction) {
@@ -242,6 +263,63 @@ module.exports.find = ({
     })
 
     return await success(result, ctx)
+  } catch (err) {
+    return await fail(err, ctx)
+  } finally {
+    if (client) {
+      client.release()
+    }
+  }
+}
+
+module.exports.count = ({
+  poolId = defaultPoolIdFn,
+  transaction = defaultTransactionFn,
+  table = defaultTableFn,
+  where = defaultWhereFn,
+  limit = defaultLimitFn,
+  offset = defaultOffsetFn,
+  success = defaultSuccessFn,
+  returnQuery = defaultReturnQueryFn,
+  fail = defaultFailFn
+}) => async ctx => {
+  let client
+  try {
+    const _poolId = await poolId(ctx)
+    const _table = await table(ctx)
+    const _transaction = await transaction(ctx)
+    const _where = await where(ctx)
+    const _limit = await limit(ctx)
+    const _offset = await offset(ctx)
+    const _returnQuery = await returnQuery(ctx)
+
+    if (!_poolId && !_transaction) {
+      throw new Error('poolId or trasaction is required')
+    }
+    if (!_table) throw new Error('table is required')
+
+    const query = [`select count(${_table}.*) from ${_table}`]
+
+    if (_where) {
+      query.push(`where ${_where.replace(/_table_/g, _table)} `)
+    }
+
+    query.push(`limit ${_limit}`)
+    query.push(`offset ${_offset}`)
+    const queryStr = query.join(' ')
+    if (_returnQuery) return queryStr
+    console.info('QUERY:', queryStr)
+
+    if (!_transaction) {
+      client = await pools[_poolId].connect()
+    }
+    const result = _transaction
+      ? await _transaction.query(queryStr)
+      : await client.query(queryStr)
+
+    const count = (result.rows[0] || {}).count || 0
+
+    return await success(count, ctx)
   } catch (err) {
     return await fail(err, ctx)
   } finally {
