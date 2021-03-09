@@ -317,7 +317,7 @@ module.exports.count = ({
       ? await _transaction.query(queryStr)
       : await client.query(queryStr)
 
-    const count = (result.rows[0] || {}).count || 0
+    const count = parseInt((result.rows[0] || {}).count || 0)
 
     return await success(count, ctx)
   } catch (err) {
