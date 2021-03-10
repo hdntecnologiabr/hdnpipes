@@ -32,6 +32,8 @@ const defaultFileBufferFn = ctx => undefined
 
 const defaultStoragePathFn = ctx => undefined
 
+const defaultPublicFileFn = ctx => false
+
 /**
  * @param {string} GCStoragePath
  */
@@ -80,6 +82,7 @@ module.exports.uploadFile = ({
   fileBuffer = defaultFileBufferFn,
   filePath = defaultFilePathFn,
   storagePath = defaultStoragePathFn,
+  publicFile = defaultPublicFileFn,
   success = defaultSuccessFn,
   fail = defaultFailFn
 }) => async ctx => {
@@ -89,6 +92,7 @@ module.exports.uploadFile = ({
     const _filePath = await filePath(ctx)
     const _fileName = await fileName(ctx)
     const _storagePath = await storagePath(ctx)
+    const _publicFile = await publicFile(ctx)
     const _fileBuffer = _filePath
       ? await fs.readFileSync(_filePath)
       : await fileBuffer(ctx)
@@ -108,14 +112,17 @@ module.exports.uploadFile = ({
       .bucket(process.env.GCLOUD_STORAGE_BUCKET)
       .file(storageFileNameWithPath)
     const blobStream = blob.createWriteStream({
-      resumable: false
+      resumable: false,
+      public: _publicFile
     })
     return await new Promise(resolve =>
       blobStream
         .on('finish', () => {
           resolve(
             success(
-              `gs://${process.env.GCLOUD_STORAGE_BUCKET}/${storageFileNameWithPath}`,
+              `${_publicFile ? 'https://storage.googleapis.com/' : 'gs://'}${
+                process.env.GCLOUD_STORAGE_BUCKET
+              }/${storageFileNameWithPath}`,
               ctx
             )
           )
