@@ -59,7 +59,10 @@ module.exports.query = ({
     const result = (_transaction
       ? await transaction.query(_query[0], _query[1])
       : await client.query(_query[0], _query[1])
-    ).rows.map(d => ({ id: d.id, ...d.body }))
+    ).rows.map(d => {
+      const { id, body, ...rest } = d
+      return { id, ...body, ...rest }
+    })
     return await success(result, ctx)
   } catch (err) {
     return await fail(err, ctx)
