@@ -1,6 +1,6 @@
 const { pipe } = require('./index.js')
 
-describe('descPipeAsync function', () => {
+describe('decPipeAsync function', () => {
   it('deve passar o resultado de uma função como parametro para a proxima', async () => {
     const one = ctx => ctx + 1
     const two = ctx => ctx + 2

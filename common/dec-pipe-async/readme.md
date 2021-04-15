@@ -1,4 +1,4 @@
-#DescPipeAsync
+#DecPipeAsync
 
 Função para criação de pipeline de execução asyncrono. Um pipeline pode ser descrito como um encadeamento de operações onde o resultado da função anterior serve de entrada para a função posterior
 
@@ -7,7 +7,7 @@ Função para criação de pipeline de execução asyncrono. Um pipeline pode se
 ##Exemplo
 
 ```
-const { pipe } = require('hdnpipes/common/desc-pipe-async')
+const { pipe } = require('hdnpipes/common/dec-pipe-async')
 
 const addOne = ctx => ctx + 1
 const addTwo = ctx => ctx + 2
