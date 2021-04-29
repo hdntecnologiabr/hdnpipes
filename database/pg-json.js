@@ -57,7 +57,7 @@ module.exports.query = ({
       client = await pools[_poolId].connect()
     }
     const result = (_transaction
-      ? await transaction.query(_query[0], _query[1])
+      ? await _transaction.query(_query[0], _query[1])
       : await client.query(_query[0], _query[1])
     ).rows.map(d => {
       const { id, body, ...rest } = d
