@@ -1,7 +1,5 @@
 const axios = require('axios').default
 
-const defaultTokenFn = ctx => ''
-
 const defaultSenderFn = ctx => ''
 
 const defaultReceiverFn = ctx => ''
