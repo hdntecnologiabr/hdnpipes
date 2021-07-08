@@ -27,7 +27,7 @@ Daqui você vai precisar de 3 coisas:
 
 O client deve acessar a URL: https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=CLIENT_ID&redirect_uri=REDIRECT_URL&scope=r_liteprofile%20r_emailaddress
 
-REDIRECT_URL = Deve ser uma das redirect URL que você inseriu na aba "Auth"
+REDIRECT_URL = Deve ser uma das redirect URL que você inseriu na aba "Auth" (Neste acesso a REDIRECT_URL deve estar codificada)
 
 CLIENT_ID = Deve ser seu Client ID
 
