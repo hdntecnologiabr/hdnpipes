@@ -92,7 +92,7 @@ const getFieldOperatorValue = {
   'array-contains': where => {
     const [rawField, cast] = (where[0] || '').split('::')
 
-    const field = rawField === 'id' ? '_table_.id' : `(_table_.body${constructJsonbPath(rawField)})${cast ? `::${cast}` : ''}`
+    const field = rawField === 'id' ? '_table_.id' : `(_table_.body${constructJsonbPath(rawField)})${cast ? `::${cast}` : '::jsonb'}`
     const operator = '@>'
     const value = `'${JSON.stringify(where[2])}'`
 
