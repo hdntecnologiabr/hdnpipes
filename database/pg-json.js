@@ -24,6 +24,7 @@ startPools()
 const defaultPoolIdFn = ctx => ''
 const defaultQueryFn = ctx => ['', []]
 const defaultSuccessFn = (result, ctx) => ({ result, ctx })
+const defaultLogsFn = ctx => true
 const defaultFailFn = (err, ctx) => {
   throw err
 }
@@ -40,13 +41,22 @@ const defaultSubqueriesFn = ctx => []
 const defaultReturnQueryFn = ctx => false
 
 module.exports.query =
-  ({ poolId = defaultPoolIdFn, transaction = defaultTransactionFn, query = defaultQueryFn, success = defaultSuccessFn, fail = defaultFailFn }) =>
+  ({
+    poolId = defaultPoolIdFn,
+    transaction = defaultTransactionFn,
+    query = defaultQueryFn,
+    success = defaultSuccessFn,
+    fail = defaultFailFn,
+    logs = defaultLogsFn
+  }) =>
   async ctx => {
     let client
     try {
       const _poolId = await poolId(ctx)
       const _transaction = await transaction(ctx)
       const _query = await query(ctx)
+      const _logs = await logs(ctx)
+      if (_logs) console.info('QUERY:', _query)
       if (!_transaction) {
         client = await pools[_poolId].connect()
       }
@@ -154,10 +164,11 @@ module.exports.find =
     denormalize = defaultDenormalizeFn,
     subqueries = defaultSubqueriesFn,
     orderBy = defaultOrderByFn,
+    returnQuery = defaultReturnQueryFn,
+    logs = defaultLogsFn,
     limit = defaultLimitFn,
     offset = defaultOffsetFn,
     success = defaultSuccessFn,
-    returnQuery = defaultReturnQueryFn,
     fail = defaultFailFn
   }) =>
   async ctx => {
@@ -173,6 +184,7 @@ module.exports.find =
       const _limit = await limit(ctx)
       const _offset = await offset(ctx)
       const _returnQuery = await returnQuery(ctx)
+      const _logs = await logs(ctx)
 
       if (!_poolId && !_transaction) {
         throw new Error('poolId or trasaction is required')
@@ -225,7 +237,7 @@ module.exports.find =
       query.push(`offset ${_offset}`)
       const queryStr = query.join(' ')
       if (_returnQuery) return queryStr
-      console.info('QUERY:', queryStr)
+      if (_logs) console.info('QUERY:', queryStr)
 
       if (!_transaction) {
         client = await pools[_poolId].connect()
@@ -251,10 +263,11 @@ module.exports.count =
     transaction = defaultTransactionFn,
     table = defaultTableFn,
     where = defaultWhereFn,
+    returnQuery = defaultReturnQueryFn,
+    logs = defaultLogsFn,
     limit = defaultLimitFn,
     offset = defaultOffsetFn,
     success = defaultSuccessFn,
-    returnQuery = defaultReturnQueryFn,
     fail = defaultFailFn
   }) =>
   async ctx => {
@@ -267,6 +280,7 @@ module.exports.count =
       const _limit = await limit(ctx)
       const _offset = await offset(ctx)
       const _returnQuery = await returnQuery(ctx)
+      const _logs = await logs(ctx)
 
       if (!_poolId && !_transaction) {
         throw new Error('poolId or trasaction is required')
@@ -283,7 +297,7 @@ module.exports.count =
       query.push(`offset ${_offset}`)
       const queryStr = query.join(' ')
       if (_returnQuery) return queryStr
-      console.info('QUERY:', queryStr)
+      if (_logs) console.info('QUERY:', queryStr)
 
       if (!_transaction) {
         client = await pools[_poolId].connect()
@@ -308,6 +322,7 @@ module.exports.save =
     transaction = defaultTransactionFn,
     table = defaultTableFn,
     data = defualtDataFn,
+    logs = defaultLogsFn,
     success = defaultSuccessFn,
     fail = defaultFailFn
   }) =>
@@ -318,6 +333,7 @@ module.exports.save =
       const _transaction = await transaction(ctx)
       const _table = await table(ctx)
       const _data = await data(ctx)
+      const _logs = await logs(ctx)
 
       if (!_transaction) {
         client = await pools[_poolId].connect()
@@ -330,6 +346,8 @@ module.exports.save =
       const query = id
         ? [`update ${_table} set body=body||$1 where id=$2`, [JSON.stringify(body), id]]
         : [`insert into ${_table}(body) values ($1) returning id`, [JSON.stringify(body)]]
+
+      if (_logs) console.info('QUERY:', query)
 
       const res = _transaction ? await _transaction.query(query[0], query[1]) : await client.query(query[0], query[1])
 
@@ -349,6 +367,7 @@ module.exports.remove =
     transaction = defaultTransactionFn,
     table = defaultTableFn,
     id = defaultIdFn,
+    logs = defaultLogsFn,
     success = defaultSuccessFn,
     fail = defaultFailFn
   }) =>
@@ -363,6 +382,7 @@ module.exports.remove =
         client = await pools[_poolId].connect()
       }
       const query = `delete from ${_table} where id='${_id}'`
+      if (_logs) console.info('QUERY:', query)
       const res = _transaction ? await _transaction.query(query) : await client.query(query)
       return await success(res, ctx)
     } catch (err) {
