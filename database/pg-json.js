@@ -8,7 +8,7 @@ const startPools = () => {
     const poolId = k
     const connectionString = poolsConfigs[k]
     if (!pools[poolId]) {
-      pools[poolId] = new Pool({ connectionString: connectionString })
+      pools[poolId] = new Pool({ connectionString: connectionString, max: process.env.DATABASE_PGJSON_POOLSCONFIG_MAX || 10 })
       pools[poolId].on('error', err => {
         console.error(`POOL ${poolId} ERROR:`, err)
         // process.exit(-1)
