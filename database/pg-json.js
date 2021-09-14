@@ -34,7 +34,7 @@ const defaultFailFn = (err, ctx) => {
 const defaultTableFn = ctx => ''
 const defaultWhereFn = ctx => ''
 const defaultOrderByFn = ctx => ''
-const defaultLimitFn = ctx => 50
+const defaultLimitFn = ctx => 10000
 const defaultOffsetFn = ctx => 0
 const defaultTransactionFn = ctx => ctx.transaction
 const defualtDataFn = ctx => ({})
