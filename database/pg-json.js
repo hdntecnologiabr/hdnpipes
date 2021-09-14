@@ -1,38 +1,30 @@
-const { Pool, Client } = require('pg')
+const { Pool } = require('pg')
 
 const pools = {}
 
-const getConnection = async connectionId => {
-  const connections = JSON.parse(process.env.DATABASE_PGJSON_CONNECTIONSCONFIG || '{}')
-
-  if (!process.env.DATABASE_PGJSON_ENABLEPOOL) {
-    const conn = new Client({ connectionString: connections[connectionId] })
-    await conn.connect()
-    return conn
-  }
-
-  if (!pools[connectionId]) {
-    pools[connectionId] = new Pool({
-      connectionString: connections[connectionId],
-      max: process.env.DATABASE_PGJSON_POOLSCONFIG_MAX ? Number(process.env.DATABASE_PGJSON_POOLSCONFIG_MAX) : 10
-    })
-    pools[connectionId].on('error', err => {
-      console.error(`POOL ${connectionId} ERROR:`, err)
-      // process.exit(-1)
-    })
-  }
-  return await pools[connectionId].connect()
+const startPools = () => {
+  const poolsConfigs = JSON.parse(process.env.DATABASE_PGJSON_POOLSCONFIG || '{}')
+  Object.keys(poolsConfigs).forEach(k => {
+    const poolId = k
+    const connectionString = poolsConfigs[k]
+    if (!pools[poolId]) {
+      pools[poolId] = new Pool({
+        connectionString: connectionString,
+        max: process.env.DATABASE_PGJSON_POOLSCONFIG_MAX ? Number(process.env.DATABASE_PGJSON_POOLSCONFIG_MAX) : 10
+      })
+      pools[poolId].on('error', err => {
+        console.error(`POOL ${poolId} ERROR:`, err)
+        // process.exit(-1)
+      })
+    }
+  })
 }
 
-const releaseConnection = async connection => {
-  if (!process.env.DATABASE_PGJSON_ENABLEPOOL) {
-    return await connection.end()
-  }
+module.exports.startPools = startPools
 
-  return await connection.release()
-}
+startPools()
 
-const defaultConnectionIdFn = ctx => ''
+const defaultPoolIdFn = ctx => ''
 const defaultQueryFn = ctx => ['', []]
 const defaultSuccessFn = (result, ctx) => ({ result, ctx })
 const defaultLogsFn = ctx => true
@@ -53,37 +45,37 @@ const defaultReturnQueryFn = ctx => false
 
 module.exports.query =
   ({
-    connectionId = defaultConnectionIdFn,
+    poolId = defaultPoolIdFn,
     transaction = defaultTransactionFn,
     query = defaultQueryFn,
     success = defaultSuccessFn,
     fail = defaultFailFn,
     logs = defaultLogsFn
   }) =>
-    async ctx => {
-      let client
-      try {
-        const _connectionId = await connectionId(ctx)
-        const _transaction = await transaction(ctx)
-        const _query = await query(ctx)
-        const _logs = await logs(ctx)
-        if (_logs) console.info('QUERY:', _query)
-        if (!_transaction) {
-          client = await getConnection(_connectionId)
-        }
-        const result = (_transaction ? await _transaction.query(_query[0], _query[1]) : await client.query(_query[0], _query[1])).rows.map(d => {
-          const { id, body, ...rest } = d
-          return { id, ...body, ...rest }
-        })
-        return await success(result, ctx)
-      } catch (err) {
-        return await fail(err, ctx)
-      } finally {
-        if (client) {
-          await releaseConnection(client)
-        }
+  async ctx => {
+    let client
+    try {
+      const _poolId = await poolId(ctx)
+      const _transaction = await transaction(ctx)
+      const _query = await query(ctx)
+      const _logs = await logs(ctx)
+      if (_logs) console.info('QUERY:', _query)
+      if (!_transaction) {
+        client = await pools[_poolId].connect()
+      }
+      const result = (_transaction ? await _transaction.query(_query[0], _query[1]) : await client.query(_query[0], _query[1])).rows.map(d => {
+        const { id, body, ...rest } = d
+        return { id, ...body, ...rest }
+      })
+      return await success(result, ctx)
+    } catch (err) {
+      return await fail(err, ctx)
+    } finally {
+      if (client) {
+        client.release()
       }
     }
+  }
 
 const constructJsonbPath = rawPath =>
   rawPath.split('.').reduce((fields, field, i, rawFields) => `${fields}${i === rawFields.length - 1 ? '->>' : '->'}'${field}'`, '')
@@ -130,12 +122,12 @@ const getFieldOperatorValue = {
     const operator = where[1]
     const value = Array.isArray(where[2])
       ? where[2].reduce(
-        (queryValue, currentValue, index) =>
+          (queryValue, currentValue, index) =>
             `${index === 0 ? '(' : ''}${queryValue}${index > 0 ? `, '${currentValue}'` : `'${currentValue}'`}${
               index === where[2].length - 1 ? ')' : ''
             }`,
-        ''
-      )
+          ''
+        )
       : []
 
     return {
@@ -148,19 +140,19 @@ const getFieldOperatorValue = {
 
 const andOrFactory =
   type =>
-    (values = []) => {
-      const wh = []
-      values.forEach(w => {
-        if (typeof w === 'string') {
-          wh.push(w)
-        }
-        if (Array.isArray(w)) {
-          const { field, operator, value } = (getFieldOperatorValue[w[1]] || getFieldOperatorValue.default)(w)
-          wh.push(`${field} ${operator} ${value}`)
-        }
-      })
-      return wh.length > 0 ? `(${wh.join(` ${type} `)})` : ''
-    }
+  (values = []) => {
+    const wh = []
+    values.forEach(w => {
+      if (typeof w === 'string') {
+        wh.push(w)
+      }
+      if (Array.isArray(w)) {
+        const { field, operator, value } = (getFieldOperatorValue[w[1]] || getFieldOperatorValue.default)(w)
+        wh.push(`${field} ${operator} ${value}`)
+      }
+    })
+    return wh.length > 0 ? `(${wh.join(` ${type} `)})` : ''
+  }
 
 module.exports.and = (...values) => andOrFactory('and')(values)
 
@@ -168,7 +160,7 @@ module.exports.or = (...values) => andOrFactory('or')(values)
 
 module.exports.find =
   ({
-    connectionId = defaultConnectionIdFn,
+    poolId = defaultPoolIdFn,
     transaction = defaultTransactionFn,
     table = defaultTableFn,
     where = defaultWhereFn,
@@ -182,52 +174,52 @@ module.exports.find =
     success = defaultSuccessFn,
     fail = defaultFailFn
   }) =>
-    async ctx => {
-      let client
-      try {
-        const _connectionId = await connectionId(ctx)
-        const _table = await table(ctx)
-        const _transaction = await transaction(ctx)
-        const _where = await where(ctx)
-        const _denormalize = await denormalize(ctx)
-        const _subqueries = await subqueries(ctx)
-        const _orderBy = await orderBy(ctx)
-        const _limit = await limit(ctx)
-        const _offset = await offset(ctx)
-        const _returnQuery = await returnQuery(ctx)
-        const _logs = await logs(ctx)
+  async ctx => {
+    let client
+    try {
+      const _poolId = await poolId(ctx)
+      const _table = await table(ctx)
+      const _transaction = await transaction(ctx)
+      const _where = await where(ctx)
+      const _denormalize = await denormalize(ctx)
+      const _subqueries = await subqueries(ctx)
+      const _orderBy = await orderBy(ctx)
+      const _limit = await limit(ctx)
+      const _offset = await offset(ctx)
+      const _returnQuery = await returnQuery(ctx)
+      const _logs = await logs(ctx)
 
-        if (!_connectionId && !_transaction) {
-          throw new Error('poolId or trasaction is required')
-        }
-        if (!_table) throw new Error('table is required')
+      if (!_poolId && !_transaction) {
+        throw new Error('poolId or trasaction is required')
+      }
+      if (!_table) throw new Error('table is required')
 
-        const denormalizedTables = _denormalize.length
-          ? ',' + _denormalize.map(([table, baseField, joinField, denormalizedField], i) => `T${i}.body as ${denormalizedField}`).join(',')
-          : ''
+      const denormalizedTables = _denormalize.length
+        ? ',' + _denormalize.map(([table, baseField, joinField, denormalizedField], i) => `T${i}.body as ${denormalizedField}`).join(',')
+        : ''
 
-        const treatedSubqueries = _subqueries.length
-          ? ',' + (await Promise.all(_subqueries.map(async ([query, field]) => `(${await query(ctx)}) as ${field}`))).join(',')
-          : ''
+      const treatedSubqueries = _subqueries.length
+        ? ',' + (await Promise.all(_subqueries.map(async ([query, field]) => `(${await query(ctx)}) as ${field}`))).join(',')
+        : ''
 
-        const query = [`select ${_table}.* ${denormalizedTables} ${treatedSubqueries} from ${_table}`]
+      const query = [`select ${_table}.* ${denormalizedTables} ${treatedSubqueries} from ${_table}`]
 
-        if (_denormalize.length) {
-          _denormalize.forEach((d, i) => {
-            const sqlField = field => table => `cast(${table}.${field === 'id' ? field : `body${constructJsonbPath(field)}`} as text)`
-            const [table, baseField, joinField] = d
-            query.push(`left join ${table} T${i} on ${sqlField(joinField)(`T${i}`)}=${sqlField(baseField)(_table)}`)
-          })
-        }
+      if (_denormalize.length) {
+        _denormalize.forEach((d, i) => {
+          const sqlField = field => table => `cast(${table}.${field === 'id' ? field : `body${constructJsonbPath(field)}`} as text)`
+          const [table, baseField, joinField] = d
+          query.push(`left join ${table} T${i} on ${sqlField(joinField)(`T${i}`)}=${sqlField(baseField)(_table)}`)
+        })
+      }
 
-        if (_where) {
-          query.push(`where ${_where.replace(/_table_/g, _table)} `)
-        }
+      if (_where) {
+        query.push(`where ${_where.replace(/_table_/g, _table)} `)
+      }
 
-        if (_orderBy) {
-          const treatedOrderBy = (
-            Array.isArray(_orderBy)
-              ? _orderBy
+      if (_orderBy) {
+        const treatedOrderBy = (
+          Array.isArray(_orderBy)
+            ? _orderBy
                 .map(rawOrderByExpression =>
                   rawOrderByExpression.length === 2
                     ? `_table_.body${constructJsonbPath(rawOrderByExpression[0])} ${rawOrderByExpression[1]}`
@@ -236,41 +228,41 @@ module.exports.find =
                 .reduce((finalExpression, currentExpression, index) => {
                   return `${finalExpression}${index !== 0 ? ', ' : ''}${currentExpression}`
                 }, '')
-              : _orderBy === 'id'
-                ? _orderBy
-                : `_table_.body${constructJsonbPath(_orderBy)}`
-          ).replace(/_table_/g, _table)
+            : _orderBy === 'id'
+            ? _orderBy
+            : `_table_.body${constructJsonbPath(_orderBy)}`
+        ).replace(/_table_/g, _table)
 
-          query.push(`order by ${treatedOrderBy}`)
-        }
+        query.push(`order by ${treatedOrderBy}`)
+      }
 
-        query.push(`limit ${_limit}`)
-        query.push(`offset ${_offset}`)
-        const queryStr = query.join(' ')
-        if (_returnQuery) return queryStr
-        if (_logs) console.info('QUERY:', queryStr)
+      query.push(`limit ${_limit}`)
+      query.push(`offset ${_offset}`)
+      const queryStr = query.join(' ')
+      if (_returnQuery) return queryStr
+      if (_logs) console.info('QUERY:', queryStr)
 
-        if (!_transaction) {
-          client = await getConnection(_connectionId)
-        }
-        const result = (_transaction ? await _transaction.query(queryStr) : await client.query(queryStr)).rows.map(d => {
-          const { id, body, ...rest } = d
-          return { id, ...body, ...rest }
-        })
+      if (!_transaction) {
+        client = await pools[_poolId].connect()
+      }
+      const result = (_transaction ? await _transaction.query(queryStr) : await client.query(queryStr)).rows.map(d => {
+        const { id, body, ...rest } = d
+        return { id, ...body, ...rest }
+      })
 
-        return await success(result, ctx)
-      } catch (err) {
-        return await fail(err, ctx)
-      } finally {
-        if (client) {
-          await releaseConnection(client)
-        }
+      return await success(result, ctx)
+    } catch (err) {
+      return await fail(err, ctx)
+    } finally {
+      if (client) {
+        client.release()
       }
     }
+  }
 
 module.exports.count =
   ({
-    connectionId = defaultConnectionIdFn,
+    poolId = defaultPoolIdFn,
     transaction = defaultTransactionFn,
     table = defaultTableFn,
     where = defaultWhereFn,
@@ -281,55 +273,55 @@ module.exports.count =
     success = defaultSuccessFn,
     fail = defaultFailFn
   }) =>
-    async ctx => {
-      let client
-      try {
-        const _connectionId = await connectionId(ctx)
-        const _table = await table(ctx)
-        const _transaction = await transaction(ctx)
-        const _where = await where(ctx)
-        const _limit = await limit(ctx)
-        const _offset = await offset(ctx)
-        const _returnQuery = await returnQuery(ctx)
-        const _logs = await logs(ctx)
+  async ctx => {
+    let client
+    try {
+      const _poolId = await poolId(ctx)
+      const _table = await table(ctx)
+      const _transaction = await transaction(ctx)
+      const _where = await where(ctx)
+      const _limit = await limit(ctx)
+      const _offset = await offset(ctx)
+      const _returnQuery = await returnQuery(ctx)
+      const _logs = await logs(ctx)
 
-        if (!_connectionId && !_transaction) {
-          throw new Error('poolId or trasaction is required')
-        }
-        if (!_table) throw new Error('table is required')
+      if (!_poolId && !_transaction) {
+        throw new Error('poolId or trasaction is required')
+      }
+      if (!_table) throw new Error('table is required')
 
-        const query = [`select count(${_table}.*) from ${_table}`]
+      const query = [`select count(${_table}.*) from ${_table}`]
 
-        if (_where) {
-          query.push(`where ${_where.replace(/_table_/g, _table)} `)
-        }
+      if (_where) {
+        query.push(`where ${_where.replace(/_table_/g, _table)} `)
+      }
 
-        query.push(`limit ${_limit}`)
-        query.push(`offset ${_offset}`)
-        const queryStr = query.join(' ')
-        if (_returnQuery) return queryStr
-        if (_logs) console.info('QUERY:', queryStr)
+      query.push(`limit ${_limit}`)
+      query.push(`offset ${_offset}`)
+      const queryStr = query.join(' ')
+      if (_returnQuery) return queryStr
+      if (_logs) console.info('QUERY:', queryStr)
 
-        if (!_transaction) {
-          client = await getConnection(_connectionId)
-        }
-        const result = _transaction ? await _transaction.query(queryStr) : await client.query(queryStr)
+      if (!_transaction) {
+        client = await pools[_poolId].connect()
+      }
+      const result = _transaction ? await _transaction.query(queryStr) : await client.query(queryStr)
 
-        const count = parseInt((result.rows[0] || {}).count || 0)
+      const count = parseInt((result.rows[0] || {}).count || 0)
 
-        return await success(count, ctx)
-      } catch (err) {
-        return await fail(err, ctx)
-      } finally {
-        if (client) {
-          await releaseConnection(client)
-        }
+      return await success(count, ctx)
+    } catch (err) {
+      return await fail(err, ctx)
+    } finally {
+      if (client) {
+        client.release()
       }
     }
+  }
 
 module.exports.save =
   ({
-    connectionId = defaultConnectionIdFn,
+    poolId = defaultPoolIdFn,
     transaction = defaultTransactionFn,
     table = defaultTableFn,
     data = defualtDataFn,
@@ -337,44 +329,44 @@ module.exports.save =
     success = defaultSuccessFn,
     fail = defaultFailFn
   }) =>
-    async ctx => {
-      let client
-      try {
-        const _connectionId = await connectionId(ctx)
-        const _transaction = await transaction(ctx)
-        const _table = await table(ctx)
-        const _data = await data(ctx)
-        const _logs = await logs(ctx)
+  async ctx => {
+    let client
+    try {
+      const _poolId = await poolId(ctx)
+      const _transaction = await transaction(ctx)
+      const _table = await table(ctx)
+      const _data = await data(ctx)
+      const _logs = await logs(ctx)
 
-        if (!_transaction) {
-          client = await getConnection(_connectionId)
-        }
+      if (!_transaction) {
+        client = await pools[_poolId].connect()
+      }
 
-        const now = new Date()
-        const { id, ...body } = _data
-        body.createdAt = id ? body.createdAt : now
-        body.updatedAt = now
-        const query = id
-          ? [`update ${_table} set body=body||$1 where id=$2`, [JSON.stringify(body), id]]
-          : [`insert into ${_table}(body) values ($1) returning id`, [JSON.stringify(body)]]
+      const now = new Date()
+      const { id, ...body } = _data
+      body.createdAt = id ? body.createdAt : now
+      body.updatedAt = now
+      const query = id
+        ? [`update ${_table} set body=body||$1 where id=$2`, [JSON.stringify(body), id]]
+        : [`insert into ${_table}(body) values ($1) returning id`, [JSON.stringify(body)]]
 
-        if (_logs) console.info('QUERY:', query)
+      if (_logs) console.info('QUERY:', query)
 
-        const res = _transaction ? await _transaction.query(query[0], query[1]) : await client.query(query[0], query[1])
+      const res = _transaction ? await _transaction.query(query[0], query[1]) : await client.query(query[0], query[1])
 
-        return await success(res, ctx)
-      } catch (err) {
-        return await fail(err, ctx)
-      } finally {
-        if (client) {
-          await releaseConnection(client)
-        }
+      return await success(res, ctx)
+    } catch (err) {
+      return await fail(err, ctx)
+    } finally {
+      if (client) {
+        client.release()
       }
     }
+  }
 
 module.exports.remove =
   ({
-    connectionId = defaultConnectionIdFn,
+    poolId = defaultPoolIdFn,
     transaction = defaultTransactionFn,
     table = defaultTableFn,
     id = defaultIdFn,
@@ -382,55 +374,50 @@ module.exports.remove =
     success = defaultSuccessFn,
     fail = defaultFailFn
   }) =>
-    async ctx => {
-      let client
-      try {
-        const _connectionId = await connectionId(ctx)
-        const _transaction = await transaction(ctx)
-        const _table = await table(ctx)
-        const _id = await id(ctx)
-        const _logs = await logs(ctx)
-        if (!_transaction) {
-          client = await getConnection(_connectionId)
-        }
-        const query = `delete from ${_table} where id='${_id}'`
-        if (_logs) console.info('QUERY:', query)
-        const res = _transaction ? await _transaction.query(query) : await client.query(query)
-        return await success(res, ctx)
-      } catch (err) {
-        return await fail(err, ctx)
-      } finally {
-        if (client) {
-          await releaseConnection(client)
-        }
+  async ctx => {
+    let client
+    try {
+      const _poolId = await poolId(ctx)
+      const _transaction = await transaction(ctx)
+      const _table = await table(ctx)
+      const _id = await id(ctx)
+      if (!_transaction) {
+        client = await pools[_poolId].connect()
+      }
+      const query = `delete from ${_table} where id='${_id}'`
+      if (_logs) console.info('QUERY:', query)
+      const res = _transaction ? await _transaction.query(query) : await client.query(query)
+      return await success(res, ctx)
+    } catch (err) {
+      return await fail(err, ctx)
+    } finally {
+      if (client) {
+        client.release()
       }
     }
+  }
 
 module.exports.transaction =
-  ({
-    connectionId = defaultConnectionIdFn,
-    functions = [],
-    fail = defaultFailFn
-  }) =>
-    async ctx => {
-      let client
-      try {
-        const _connectionId = await connectionId(ctx)
-        client = await getConnection(_connectionId)
-        client.query('BEGIN;')
-        ctx.transaction = client
-        let current = ctx
-        for (const i in functions) {
-          current = await functions[i](current)
-        }
-        client.query('COMMIT;')
-        return current
-      } catch (err) {
-        client.query('ROLLBACK;')
-        return await fail(err)
-      } finally {
-        if (client) {
-          await releaseConnection(client)
-        }
+  ({ poolId = defaultPoolIdFn, functions = [], fail = defaultFailFn }) =>
+  async ctx => {
+    let client
+    try {
+      const _poolId = await poolId(ctx)
+      client = await pools[_poolId].connect()
+      client.query('BEGIN;')
+      ctx.transaction = client
+      let current = ctx
+      for (const i in functions) {
+        current = await functions[i](current)
+      }
+      client.query('COMMIT;')
+      return current
+    } catch (err) {
+      client.query('ROLLBACK;')
+      return await fail(err)
+    } finally {
+      if (client) {
+        client.release()
       }
     }
+  }
