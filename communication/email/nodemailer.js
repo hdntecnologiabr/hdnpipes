@@ -14,6 +14,8 @@ const defaultTransporterPassword = ctx => ''
 
 const defaultReceiversFn = ctx => []
 
+const defaultCCFn = ctx => []
+
 const defaultSubjectFn = ctx => ''
 
 const defaultTextFn = ctx => ''
@@ -40,6 +42,7 @@ module.exports.sendEmail = ({
   transporterUser = defaultTransporterUser,
   transporterPassword = defaultTransporterPassword,
   receivers = defaultReceiversFn,
+  cc = defaultCCFn,
   subject = defaultSubjectFn,
   text = defaultTextFn,
   html = defaultHtmlFn,
@@ -57,6 +60,7 @@ module.exports.sendEmail = ({
     const _transporterUser = await transporterUser(ctx)
     const _transporterPassword = await transporterPassword(ctx)
     const _receivers = await receivers(ctx)
+    const _cc = await cc(ctx)
     const _subject = await subject(ctx)
     const _text = await text(ctx)
     const _html = await html(ctx)
@@ -82,6 +86,7 @@ module.exports.sendEmail = ({
           to + (index === 0 ? '' : ' ') + currentReceiver,
         ''
       ),
+      cc: _cc,
       subject: _subject,
       text: _text,
       html: _html,
