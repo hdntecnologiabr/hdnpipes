@@ -3,16 +3,20 @@ const { Pool } = require('pg')
 const pools = {}
 
 const startPools = () => {
-  const poolsConfigs = JSON.parse(process.env.DATABASE_PGJSON_POOLSCONFIG || '{}')
-  Object.keys(poolsConfigs).forEach(k => {
+  const poolsConfigs = JSON.parse(
+    process.env.DATABASE_PGJSON_POOLSCONFIG || '{}'
+  )
+  Object.keys(poolsConfigs).forEach((k) => {
     const poolId = k
     const connectionString = poolsConfigs[k]
     if (!pools[poolId]) {
       pools[poolId] = new Pool({
         connectionString: connectionString,
-        max: process.env.DATABASE_PGJSON_POOLSCONFIG_MAX ? Number(process.env.DATABASE_PGJSON_POOLSCONFIG_MAX) : 10
+        max: process.env.DATABASE_PGJSON_POOLSCONFIG_MAX
+          ? Number(process.env.DATABASE_PGJSON_POOLSCONFIG_MAX)
+          : 10
       })
-      pools[poolId].on('error', err => {
+      pools[poolId].on('error', (err) => {
         console.error(`POOL ${poolId} ERROR:`, err)
         // process.exit(-1)
       })
@@ -24,24 +28,25 @@ module.exports.startPools = startPools
 
 startPools()
 
-const defaultPoolIdFn = ctx => ''
-const defaultQueryFn = ctx => ['', []]
+const defaultPoolIdFn = (ctx) => ''
+const defaultQueryFn = (ctx) => ['', []]
 const defaultSuccessFn = (result, ctx) => ({ result, ctx })
-const defaultLogsFn = ctx => true
+const defaultLogsFn = (ctx) => true
 const defaultFailFn = (err, ctx) => {
   throw err
 }
-const defaultTableFn = ctx => ''
-const defaultWhereFn = ctx => ''
-const defaultOrderByFn = ctx => ''
-const defaultLimitFn = ctx => 10000
-const defaultOffsetFn = ctx => 0
-const defaultTransactionFn = ctx => ctx.transaction
-const defualtDataFn = ctx => ({})
-const defaultIdFn = ctx => ''
-const defaultDenormalizeFn = ctx => []
-const defaultSubqueriesFn = ctx => []
-const defaultReturnQueryFn = ctx => false
+const defaultTableFn = (ctx) => ''
+const defaultWhereFn = (ctx) => ''
+const defaultOrderByFn = (ctx) => ''
+const defaultLimitFn = (ctx) => 10000
+const defaultOffsetFn = (ctx) => 0
+const defaultTransactionFn = (ctx) => ctx.transaction
+const defualtDataFn = (ctx) => ({})
+const defaultIdFn = (ctx) => ''
+const defaultDenormalizeFn = (ctx) => []
+const defaultSubqueriesFn = (ctx) => []
+const defaultReturnQueryFn = (ctx) => false
+const defaultUseCoalesceFn = (ctx) => false
 
 module.exports.query =
   ({
@@ -52,7 +57,7 @@ module.exports.query =
     fail = defaultFailFn,
     logs = defaultLogsFn
   }) =>
-    async ctx => {
+    async (ctx) => {
       let client
       try {
         const _poolId = await poolId(ctx)
@@ -63,7 +68,11 @@ module.exports.query =
         if (!_transaction) {
           client = await pools[_poolId].connect()
         }
-        const result = (_transaction ? await _transaction.query(_query[0], _query[1]) : await client.query(_query[0], _query[1])).rows.map(d => {
+        const result = (
+          _transaction
+            ? await _transaction.query(_query[0], _query[1])
+            : await client.query(_query[0], _query[1])
+        ).rows.map((d) => {
           const { id, body, ...rest } = d
           return { id, ...body, ...rest }
         })
@@ -77,22 +86,46 @@ module.exports.query =
       }
     }
 
-const constructJsonbPath = rawPath =>
-  rawPath.split('.').reduce((fields, field, i, rawFields) => `${fields}${i === rawFields.length - 1 ? '->>' : '->'}'${field}'`, '')
+const constructJsonbPath = (rawPath) =>
+  rawPath
+    .split('.')
+    .reduce(
+      (fields, field, i, rawFields) =>
+        `${fields}${i === rawFields.length - 1 ? '->>' : '->'}'${field}'`,
+      ''
+    )
 
-const constructOrderByExpression = rawOrderByExpression => {
-  const { field, operator, value } = (getFieldOperatorValue[rawOrderByExpression[1]] || getFieldOperatorValue.default)(rawOrderByExpression)
+const constructOrderByExpression = (rawOrderByExpression, useCoalesce) => {
+  const { field, operator, value } = (
+    getFieldOperatorValue[rawOrderByExpression[1]] ||
+    getFieldOperatorValue.default
+  )(rawOrderByExpression)
 
-  const order = rawOrderByExpression[3] && (rawOrderByExpression[3] === 'asc' || rawOrderByExpression[3] === 'desc') ? rawOrderByExpression[3] : 'asc'
+  const order =
+    rawOrderByExpression[3] &&
+    (rawOrderByExpression[3] === 'asc' || rawOrderByExpression[3] === 'desc')
+      ? rawOrderByExpression[3]
+      : 'asc'
 
-  return `${field} ${operator} ${value} ${order}`
+  const treatedField = useCoalesce
+    ? `coalesce(${field}, ${
+        rawOrderByExpression[4] !== undefined ? `'${rawOrderByExpression[4]}'` : null
+      })`
+    : field
+
+  return `${treatedField} ${operator} ${value} ${order}`
 }
 
 const getFieldOperatorValue = {
-  default: where => {
+  default: (where) => {
     const [rawField, cast] = (where[0] || '').split('::')
 
-    const field = rawField === 'id' ? '_table_.id' : `(_table_.body${constructJsonbPath(rawField)})${cast ? `::${cast}` : ''}`
+    const field =
+      rawField === 'id'
+        ? '_table_.id'
+        : `(_table_.body${constructJsonbPath(rawField)})${
+            cast ? `::${cast}` : ''
+          }`
     const operator = where[1]
     const value = `${where[2] === null ? where[2] : `'${where[2]}'`}`
 
@@ -102,10 +135,15 @@ const getFieldOperatorValue = {
       value
     }
   },
-  'array-contains': where => {
+  'array-contains': (where) => {
     const [rawField, cast] = (where[0] || '').split('::')
 
-    const field = rawField === 'id' ? '_table_.id' : `(_table_.body${constructJsonbPath(rawField)})${cast ? `::${cast}` : '::jsonb'}`
+    const field =
+      rawField === 'id'
+        ? '_table_.id'
+        : `(_table_.body${constructJsonbPath(rawField)})${
+            cast ? `::${cast}` : '::jsonb'
+          }`
     const operator = '@>'
     const value = `'${JSON.stringify(where[2])}'`
 
@@ -115,17 +153,22 @@ const getFieldOperatorValue = {
       value
     }
   },
-  in: where => {
+  in: (where) => {
     const [rawField, cast] = (where[0] || '').split('::')
 
-    const field = rawField === 'id' ? '_table_.id' : `(_table_.body${constructJsonbPath(rawField)})${cast ? `::${cast}` : ''}`
+    const field =
+      rawField === 'id'
+        ? '_table_.id'
+        : `(_table_.body${constructJsonbPath(rawField)})${
+            cast ? `::${cast}` : ''
+          }`
     const operator = where[1]
     const value = Array.isArray(where[2])
       ? where[2].reduce(
         (queryValue, currentValue, index) =>
-            `${index === 0 ? '(' : ''}${queryValue}${index > 0 ? `, '${currentValue}'` : `'${currentValue}'`}${
-              index === where[2].length - 1 ? ')' : ''
-            }`,
+            `${index === 0 ? '(' : ''}${queryValue}${
+              index > 0 ? `, '${currentValue}'` : `'${currentValue}'`
+            }${index === where[2].length - 1 ? ')' : ''}`,
         ''
       )
       : []
@@ -139,15 +182,17 @@ const getFieldOperatorValue = {
 }
 
 const andOrFactory =
-  type =>
+  (type) =>
     (values = []) => {
       const wh = []
-      values.forEach(w => {
+      values.forEach((w) => {
         if (typeof w === 'string') {
           wh.push(w)
         }
         if (Array.isArray(w)) {
-          const { field, operator, value } = (getFieldOperatorValue[w[1]] || getFieldOperatorValue.default)(w)
+          const { field, operator, value } = (
+            getFieldOperatorValue[w[1]] || getFieldOperatorValue.default
+          )(w)
           wh.push(`${field} ${operator} ${value}`)
         }
       })
@@ -168,13 +213,14 @@ module.exports.find =
     subqueries = defaultSubqueriesFn,
     orderBy = defaultOrderByFn,
     returnQuery = defaultReturnQueryFn,
+    useCoalesce = defaultUseCoalesceFn,
     logs = defaultLogsFn,
     limit = defaultLimitFn,
     offset = defaultOffsetFn,
     success = defaultSuccessFn,
     fail = defaultFailFn
   }) =>
-    async ctx => {
+    async (ctx) => {
       let client
       try {
         const _poolId = await poolId(ctx)
@@ -187,6 +233,7 @@ module.exports.find =
         const _limit = await limit(ctx)
         const _offset = await offset(ctx)
         const _returnQuery = await returnQuery(ctx)
+        const _useCoalesce = await useCoalesce(ctx)
         const _logs = await logs(ctx)
 
         if (!_poolId && !_transaction) {
@@ -195,20 +242,42 @@ module.exports.find =
         if (!_table) throw new Error('table is required')
 
         const denormalizedTables = _denormalize.length
-          ? ',' + _denormalize.map(([table, baseField, joinField, denormalizedField], i) => `T${i}.body as ${denormalizedField}`).join(',')
+          ? ',' +
+          _denormalize
+            .map(
+              ([table, baseField, joinField, denormalizedField], i) =>
+                `T${i}.body as ${denormalizedField}`
+            )
+            .join(',')
           : ''
 
         const treatedSubqueries = _subqueries.length
-          ? ',' + (await Promise.all(_subqueries.map(async ([query, field]) => `(${await query(ctx)}) as ${field}`))).join(',')
+          ? ',' +
+          (
+            await Promise.all(
+              _subqueries.map(
+                async ([query, field]) => `(${await query(ctx)}) as ${field}`
+              )
+            )
+          ).join(',')
           : ''
 
-        const query = [`select ${_table}.* ${denormalizedTables} ${treatedSubqueries} from ${_table}`]
+        const query = [
+        `select ${_table}.* ${denormalizedTables} ${treatedSubqueries} from ${_table}`
+        ]
 
         if (_denormalize.length) {
           _denormalize.forEach((d, i) => {
-            const sqlField = field => table => `cast(${table}.${field === 'id' ? field : `body${constructJsonbPath(field)}`} as text)`
+            const sqlField = (field) => (table) =>
+            `cast(${table}.${
+              field === 'id' ? field : `body${constructJsonbPath(field)}`
+            } as text)`
             const [table, baseField, joinField] = d
-            query.push(`left join ${table} T${i} on ${sqlField(joinField)(`T${i}`)}=${sqlField(baseField)(_table)}`)
+            query.push(
+            `left join ${table} T${i} on ${sqlField(joinField)(
+              `T${i}`
+            )}=${sqlField(baseField)(_table)}`
+            )
           })
         }
 
@@ -220,13 +289,17 @@ module.exports.find =
           const treatedOrderBy = (
             Array.isArray(_orderBy)
               ? _orderBy
-                .map(rawOrderByExpression =>
+                .map((rawOrderByExpression) =>
                   rawOrderByExpression.length === 2
-                    ? `_table_.body${constructJsonbPath(rawOrderByExpression[0])} ${rawOrderByExpression[1]}`
-                    : constructOrderByExpression(rawOrderByExpression)
+                    ? `_table_.body${constructJsonbPath(
+                        rawOrderByExpression[0]
+                      )} ${rawOrderByExpression[1]}`
+                    : constructOrderByExpression(rawOrderByExpression, _useCoalesce)
                 )
                 .reduce((finalExpression, currentExpression, index) => {
-                  return `${finalExpression}${index !== 0 ? ', ' : ''}${currentExpression}`
+                  return `${finalExpression}${
+                    index !== 0 ? ', ' : ''
+                  }${currentExpression}`
                 }, '')
               : _orderBy === 'id'
                 ? _orderBy
@@ -245,7 +318,11 @@ module.exports.find =
         if (!_transaction) {
           client = await pools[_poolId].connect()
         }
-        const result = (_transaction ? await _transaction.query(queryStr) : await client.query(queryStr)).rows.map(d => {
+        const result = (
+          _transaction
+            ? await _transaction.query(queryStr)
+            : await client.query(queryStr)
+        ).rows.map((d) => {
           const { id, body, ...rest } = d
           return { id, ...body, ...rest }
         })
@@ -273,7 +350,7 @@ module.exports.count =
     success = defaultSuccessFn,
     fail = defaultFailFn
   }) =>
-    async ctx => {
+    async (ctx) => {
       let client
       try {
         const _poolId = await poolId(ctx)
@@ -305,7 +382,9 @@ module.exports.count =
         if (!_transaction) {
           client = await pools[_poolId].connect()
         }
-        const result = _transaction ? await _transaction.query(queryStr) : await client.query(queryStr)
+        const result = _transaction
+          ? await _transaction.query(queryStr)
+          : await client.query(queryStr)
 
         const count = parseInt((result.rows[0] || {}).count || 0)
 
@@ -329,7 +408,7 @@ module.exports.save =
     success = defaultSuccessFn,
     fail = defaultFailFn
   }) =>
-    async ctx => {
+    async (ctx) => {
       let client
       try {
         const _poolId = await poolId(ctx)
@@ -347,12 +426,20 @@ module.exports.save =
         body.createdAt = id ? body.createdAt : now
         body.updatedAt = now
         const query = id
-          ? [`update ${_table} set body=body||$1 where id=$2`, [JSON.stringify(body), id]]
-          : [`insert into ${_table}(body) values ($1) returning id`, [JSON.stringify(body)]]
+          ? [
+            `update ${_table} set body=body||$1 where id=$2`,
+            [JSON.stringify(body), id]
+          ]
+          : [
+            `insert into ${_table}(body) values ($1) returning id`,
+            [JSON.stringify(body)]
+          ]
 
         if (_logs) console.info('QUERY:', query)
 
-        const res = _transaction ? await _transaction.query(query[0], query[1]) : await client.query(query[0], query[1])
+        const res = _transaction
+          ? await _transaction.query(query[0], query[1])
+          : await client.query(query[0], query[1])
 
         return await success(res, ctx)
       } catch (err) {
@@ -374,7 +461,7 @@ module.exports.remove =
     success = defaultSuccessFn,
     fail = defaultFailFn
   }) =>
-    async ctx => {
+    async (ctx) => {
       let client
       try {
         const _poolId = await poolId(ctx)
@@ -387,7 +474,9 @@ module.exports.remove =
         }
         const query = `delete from ${_table} where id='${_id}'`
         if (_logs) console.info('QUERY:', query)
-        const res = _transaction ? await _transaction.query(query) : await client.query(query)
+        const res = _transaction
+          ? await _transaction.query(query)
+          : await client.query(query)
         return await success(res, ctx)
       } catch (err) {
         return await fail(err, ctx)
@@ -400,7 +489,7 @@ module.exports.remove =
 
 module.exports.transaction =
   ({ poolId = defaultPoolIdFn, functions = [], fail = defaultFailFn }) =>
-    async ctx => {
+    async (ctx) => {
       let client
       try {
         const _poolId = await poolId(ctx)
