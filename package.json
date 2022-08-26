@@ -8,6 +8,7 @@
     "coverage": "http-server coverage/lcov-report"
   },
   "dependencies": {
+    "@azure/storage-blob": "^12.6.0",
     "@google-cloud/firestore": "^4.4.0",
     "@google-cloud/pubsub": "^2.7.0",
     "@google-cloud/storage": "^5.4.0",
